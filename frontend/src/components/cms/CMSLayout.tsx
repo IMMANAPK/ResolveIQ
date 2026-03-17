@@ -1,39 +1,33 @@
-import { useState, createContext, useContext } from "react";
 import { Outlet } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/cms/AppSidebar";
 import { TopBar } from "@/components/cms/TopBar";
 import { useRealtimeTracking } from "@/hooks/useRealtimeTracking";
-import type { UserRole } from "@/data/mock";
+import { RoleProvider, useRole } from "@/contexts/RoleContext";
 
-interface RoleContextType {
-  role: UserRole;
-  setRole: (role: UserRole) => void;
-}
-
-const RoleContext = createContext<RoleContextType>({ role: "admin", setRole: () => {} });
-
-export function useRole() {
-  return useContext(RoleContext);
-}
+export { useRole };
 
 export function CMSLayout() {
-  const [role, setRole] = useState<UserRole>("admin");
   useRealtimeTracking();
 
   return (
-    <RoleContext.Provider value={{ role, setRole }}>
+    <RoleProvider>
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
           <div className="flex flex-1 flex-col">
-            <TopBar role={role} onRoleChange={setRole} />
+            <TopBarWithRole />
             <main className="flex-1 overflow-auto p-6">
-              <Outlet context={{ role }} />
+              <Outlet />
             </main>
           </div>
         </div>
       </SidebarProvider>
-    </RoleContext.Provider>
+    </RoleProvider>
   );
+}
+
+function TopBarWithRole() {
+  const { role, setRole } = useRole();
+  return <TopBar role={role} onRoleChange={setRole} />;
 }
