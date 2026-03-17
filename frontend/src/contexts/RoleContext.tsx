@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-import type { UserRole } from "@/data/mock";
+import type { UserRole } from "@/types/ui";
 
 interface RoleContextType {
   role: UserRole;

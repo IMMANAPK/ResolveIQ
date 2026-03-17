@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { FileText, Mail, Eye, Bell, AlertTriangle, UserCheck, CheckCircle2 } from "lucide-react";
-import type { TimelineEvent } from "@/data/mock";
+import type { TimelineEvent } from "@/types/ui";
 import { cn } from "@/lib/utils";
 
 const iconMap: Record<TimelineEvent["type"], React.ElementType> = {

@@ -1,6 +1,6 @@
 import { CheckCircle2, Clock } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import type { Recipient } from "@/data/mock";
+import type { Recipient } from "@/types/ui";
 import { motion } from "framer-motion";
 
 export function RecipientTracker({ recipients }: { recipients: Recipient[] }) {

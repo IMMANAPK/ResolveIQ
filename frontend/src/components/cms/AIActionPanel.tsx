@@ -1,7 +1,7 @@
 import { Bot, Bell, AlertTriangle, UserCheck, Sparkles } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { Button } from "@/components/ui/button";
-import type { AIAction } from "@/data/mock";
+import type { AIAction } from "@/types/ui";
 import { motion } from "framer-motion";
 
 const iconMap: Record<AIAction["type"], React.ElementType> = {

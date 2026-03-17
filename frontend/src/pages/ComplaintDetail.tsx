@@ -7,7 +7,7 @@ import { StatusStepper } from "@/components/cms/StatusStepper";
 import { RecipientTracker } from "@/components/cms/RecipientTracker";
 import { AIActionPanel } from "@/components/cms/AIActionPanel";
 import { ActivityTimeline } from "@/components/cms/ActivityTimeline";
-import type { AIAction, TimelineEvent, Recipient } from "@/data/mock";
+import type { AIAction, TimelineEvent, Recipient } from "@/types/ui";
 import { useComplaint } from "@/hooks/useComplaints";
 import { useNotificationsForComplaint } from "@/hooks/useNotifications";
 import { useEscalationHistory, useTriggerEscalation } from "@/hooks/useEscalation";
@@ -19,14 +19,14 @@ function buildRecipients(notifications: ApiNotification[]): Recipient[] {
   const seen = new Map<string, Recipient>();
   for (const notif of notifications) {
     for (const r of notif.recipients) {
-      const name = r.recipient?.fullName ?? r.recipientId;
+      const name = r.user?.fullName ?? r.userId;
       const time = r.readAt
         ? new Date(r.readAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         : undefined;
-      if (!seen.has(r.recipientId)) {
-        seen.set(r.recipientId, { name, seen: r.isRead, time });
-      } else if (r.isRead && !seen.get(r.recipientId)!.seen) {
-        seen.set(r.recipientId, { name, seen: true, time });
+      if (!seen.has(r.userId)) {
+        seen.set(r.userId, { name, seen: r.isRead, time });
+      } else if (r.isRead && !seen.get(r.userId)!.seen) {
+        seen.set(r.userId, { name, seen: true, time });
       }
     }
   }
@@ -45,7 +45,7 @@ function buildTimeline(notifications: ApiNotification[], escalations: ApiEscalat
     }
     for (const r of notif.recipients) {
       if (r.isRead && r.readAt) {
-        events.push({ id: "viewed-" + r.id, type: "viewed", description: "Viewed by " + (r.recipient?.fullName ?? r.recipientId), timestamp: r.readAt, user: r.recipient?.fullName });
+        events.push({ id: "viewed-" + r.id, type: "viewed", description: "Viewed by " + (r.user?.fullName ?? r.userId), timestamp: r.readAt, user: r.user?.fullName });
       }
     }
   }

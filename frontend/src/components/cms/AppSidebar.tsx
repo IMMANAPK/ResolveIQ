@@ -20,7 +20,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import type { UserRole } from "@/data/mock";
+import type { UserRole } from "@/types/ui";
 
 interface NavItem {
   title: string;

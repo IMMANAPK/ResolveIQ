@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { UserRole } from "@/data/mock";
+import type { UserRole } from "@/types/ui";
 
 interface TopBarProps {
   role: UserRole;

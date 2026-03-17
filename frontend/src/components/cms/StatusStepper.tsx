@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { Status } from "@/data/mock";
+import type { Status } from "@/types/ui";
 import { CheckCircle2 } from "lucide-react";
 
 const steps: Status[] = ["New", "In Review", "In Progress", "Resolved"];

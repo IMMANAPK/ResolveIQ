@@ -1,12 +1,32 @@
 import { motion } from "framer-motion";
-import { FileText, Clock, Eye, AlertTriangle, ArrowUpRight } from "lucide-react";
+import { FileText, Clock, Eye, AlertTriangle, ArrowUpRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/cms/StatCard";
 import { StatusBadge } from "@/components/cms/StatusBadge";
-import { complaints, dashboardStats } from "@/data/mock";
+import { useComplaints } from "@/hooks/useComplaints";
+import { useNotifications } from "@/hooks/useNotifications";
+import { STATUS_LABELS, PRIORITY_LABELS, type ApiComplaintStatus } from "@/types/api";
 
 export default function Dashboard() {
+  const { data: complaints = [], isLoading: loadingComplaints } = useComplaints();
+  const { data: notifications = [], isLoading: loadingNotifications } = useNotifications();
+
+  if (loadingComplaints || loadingNotifications) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   const recentComplaints = complaints.slice(0, 5);
+
+  const dashboardStats = {
+    total: complaints.length,
+    pending: complaints.filter(c => c.status === "open" || c.status === "assigned").length,
+    viewed: notifications.filter(n => n.allRead).length, // simple approximation
+    escalations: notifications.filter(n => n.type === "escalation").length,
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -17,7 +37,7 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Complaints" value={dashboardStats.total} icon={FileText} color="primary" delay={0} trend="+2 this week" />
+        <StatCard title="Total Complaints" value={dashboardStats.total} icon={FileText} color="primary" delay={0} />
         <StatCard title="Pending" value={dashboardStats.pending} icon={Clock} color="high" delay={0.08} trend="Needs attention" />
         <StatCard title="Viewed Notifications" value={dashboardStats.viewed} icon={Eye} color="success" delay={0.16} />
         <StatCard title="Escalations" value={dashboardStats.escalations} icon={AlertTriangle} color="critical" delay={0.24} />
@@ -34,7 +54,13 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-border">
             {recentComplaints.map((c, i) => {
-              const seen = c.recipients.filter(r => r.seen).length;
+              const notifsForC = notifications.filter(n => n.complaintId === c.id);
+              const recipients = notifsForC.flatMap(n => n.recipients);
+              const seen = recipients.filter(r => r.isRead).length;
+
+              const priorityLabel = PRIORITY_LABELS[c.priority];
+              const statusLabel = STATUS_LABELS[c.status];
+
               return (
                 <motion.div
                   key={c.id}
@@ -48,14 +74,16 @@ export default function Dashboard() {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id}</span>
-                        <StatusBadge priority={c.priority}>{c.priority}</StatusBadge>
+                        <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id.slice(0, 8)}</span>
+                        <StatusBadge priority={priorityLabel as any}>{priorityLabel}</StatusBadge>
                       </div>
                       <p className="mt-1 truncate text-sm font-medium text-foreground">{c.title}</p>
                     </div>
                     <div className="hidden shrink-0 items-center gap-3 sm:flex">
-                      <StatusBadge status={c.status}>{c.status}</StatusBadge>
-                      <span className="text-xs text-muted-foreground">{seen}/{c.recipients.length} seen</span>
+                      <StatusBadge status={statusLabel as any}>{statusLabel}</StatusBadge>
+                      {recipients.length > 0 && (
+                        <span className="text-xs text-muted-foreground">{seen}/{recipients.length} seen</span>
+                      )}
                     </div>
                   </Link>
                 </motion.div>
