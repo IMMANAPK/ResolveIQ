@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-import * as sgMail from '@sendgrid/mail';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sgMail = require('@sendgrid/mail').default ?? require('@sendgrid/mail');
 import { buildNotificationEmailHtml, NotificationEmailContext } from './templates/notification.template';
 
 export interface SendEmailOptions {
@@ -39,8 +40,11 @@ export class EmailService {
       // Fallback: Nodemailer (dev / SMTP)
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST ?? 'localhost',
-        port: parseInt(process.env.SMTP_PORT ?? '1025', 10),
+        port: parseInt(process.env.SMTP_PORT ?? '587', 10),
         secure: false,
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+          : undefined,
       });
       const info = await transporter.sendMail({ from, ...options });
       return { success: true, messageId: info.messageId };
