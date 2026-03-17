@@ -12,7 +12,7 @@ export class ComplaintsController {
 
   @Post()
   create(@Body() dto: CreateComplaintDto, @CurrentUser() user: { id: string }) {
-    return this.complaintsService.create({ ...dto, raisedById: user.id });
+    return this.complaintsService.createAndNotify({ ...dto, raisedById: user.id });
   }
 
   @Get()

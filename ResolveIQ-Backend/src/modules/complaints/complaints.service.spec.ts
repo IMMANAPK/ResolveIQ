@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
+import { ComplaintNotifierService } from './complaint-notifier.service';
 import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from './entities/complaint.entity';
 
 const mockComplaint: Partial<Complaint> = {
@@ -21,6 +22,10 @@ const mockRepo = {
   update: jest.fn().mockResolvedValue({ affected: 1 }),
 };
 
+const mockNotifier = {
+  notifyCommittee: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('ComplaintsService', () => {
   let service: ComplaintsService;
 
@@ -30,6 +35,7 @@ describe('ComplaintsService', () => {
       providers: [
         ComplaintsService,
         { provide: getRepositoryToken(Complaint), useValue: mockRepo },
+        { provide: ComplaintNotifierService, useValue: mockNotifier },
       ],
     }).compile();
     service = module.get<ComplaintsService>(ComplaintsService);
