@@ -14,13 +14,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Redirect to login on 401
+// On 401, clear credentials and fire a custom event — AuthContext listens and
+// does a soft React Router navigation (no hard page reload).
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('access_token');
-      window.location.href = '/login';
+      localStorage.removeItem('auth_user');
+      window.dispatchEvent(new Event('auth:logout'));
     }
     return Promise.reject(err);
   },

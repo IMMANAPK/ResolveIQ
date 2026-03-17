@@ -42,6 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
+  // Listen for 401 events from the axios interceptor — clear state without a hard reload
+  useEffect(() => {
+    const handle = () => {
+      setToken(null);
+      setUser(null);
+      disconnectSocket();
+    };
+    window.addEventListener('auth:logout', handle);
+    return () => window.removeEventListener('auth:logout', handle);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await api.post<LoginResponse>('/auth/login', { email, password });
     localStorage.setItem('access_token', data.accessToken);
