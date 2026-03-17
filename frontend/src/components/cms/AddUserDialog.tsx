@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -34,13 +34,13 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
   const {
     register,
     handleSubmit,
+    control,
     watch,
-    setValue,
     reset,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "complainant" },
+    defaultValues: { role: "complainant", department: "", password: "", fullName: "", email: "" },
   });
 
   const role = watch("role");
@@ -52,7 +52,7 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
         password: data.password,
         fullName: data.fullName,
         role: data.role,
-        department: data.role === "committee_member" ? data.department : undefined,
+        department: data.role === "committee_member" && data.department ? data.department : undefined,
       });
       toast.success("User created successfully");
       reset();
@@ -75,36 +75,43 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Full Name */}
           <div className="space-y-1.5">
             <Label htmlFor="fullName">Full Name</Label>
             <Input id="fullName" placeholder="Jane Smith" {...register("fullName")} />
             {errors.fullName && <p className="text-xs text-destructive">{errors.fullName.message}</p>}
           </div>
 
+          {/* Email */}
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" placeholder="jane@example.com" {...register("email")} />
             {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           </div>
 
+          {/* Role — controlled via Controller so watch("role") always reflects selection */}
           <div className="space-y-1.5">
             <Label>Role</Label>
-            <Select
-              defaultValue="complainant"
-              onValueChange={(v) => setValue("role", v as FormData["role"])}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="complainant">Complainant</SelectItem>
-                <SelectItem value="committee_member">Committee Member</SelectItem>
-                <SelectItem value="manager">Manager</SelectItem>
-              </SelectContent>
-            </Select>
+            <Controller
+              control={control}
+              name="role"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="complainant">Complainant</SelectItem>
+                    <SelectItem value="committee_member">Committee Member</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
             {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
           </div>
 
+          {/* Committee Name — only visible when role = committee_member */}
           {role === "committee_member" && (
             <div className="space-y-1.5">
               <Label htmlFor="department">Committee Name</Label>
@@ -116,6 +123,7 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
             </div>
           )}
 
+          {/* Password */}
           <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" placeholder="Min 6 characters" {...register("password")} />
