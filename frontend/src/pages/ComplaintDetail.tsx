@@ -1,120 +1,181 @@
-import { useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/cms/StatusBadge";
 import { StatusStepper } from "@/components/cms/StatusStepper";
 import { RecipientTracker } from "@/components/cms/RecipientTracker";
 import { AIActionPanel } from "@/components/cms/AIActionPanel";
 import { ActivityTimeline } from "@/components/cms/ActivityTimeline";
-import { complaints } from "@/data/mock";
 import type { AIAction, TimelineEvent, Recipient } from "@/data/mock";
+import { useComplaint } from "@/hooks/useComplaints";
+import { useNotificationsForComplaint } from "@/hooks/useNotifications";
+import { useEscalationHistory, useTriggerEscalation } from "@/hooks/useEscalation";
+import { PRIORITY_LABELS, STATUS_LABELS, CATEGORY_LABELS } from "@/types/api";
+import type { ApiNotification, ApiEscalationLog } from "@/types/api";
 import { toast } from "sonner";
+
+function buildRecipients(notifications: ApiNotification[]): Recipient[] {
+  const seen = new Map<string, Recipient>();
+  for (const notif of notifications) {
+    for (const r of notif.recipients) {
+      const name = r.recipient?.fullName ?? r.recipientId;
+      const time = r.readAt
+        ? new Date(r.readAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : undefined;
+      if (!seen.has(r.recipientId)) {
+        seen.set(r.recipientId, { name, seen: r.isRead, time });
+      } else if (r.isRead && !seen.get(r.recipientId)!.seen) {
+        seen.set(r.recipientId, { name, seen: true, time });
+      }
+    }
+  }
+  return Array.from(seen.values());
+}
+
+function buildTimeline(notifications: ApiNotification[], escalations: ApiEscalationLog[]): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  for (const notif of notifications) {
+    if (notif.type === "initial") {
+      events.push({ id: "email-" + notif.id, type: "email_sent", description: "Email sent to " + notif.recipients.length + " recipient(s)", timestamp: notif.createdAt });
+    } else if (notif.type === "reminder") {
+      events.push({ id: "reminder-" + notif.id, type: "reminder", description: "AI reminder sent", timestamp: notif.createdAt });
+    } else if (notif.type === "re_routed") {
+      events.push({ id: "reroute-" + notif.id, type: "reassignment", description: "Notification rerouted to available members", timestamp: notif.createdAt });
+    }
+    for (const r of notif.recipients) {
+      if (r.isRead && r.readAt) {
+        events.push({ id: "viewed-" + r.id, type: "viewed", description: "Viewed by " + (r.recipient?.fullName ?? r.recipientId), timestamp: r.readAt, user: r.recipient?.fullName });
+      }
+    }
+  }
+  for (const esc of escalations) {
+    events.push({ id: "esc-" + esc.id, type: "escalation", description: "Escalation - step: " + esc.step, timestamp: esc.createdAt });
+  }
+  return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+function buildAiActions(notifications: ApiNotification[], escalations: ApiEscalationLog[]): AIAction[] {
+  const actions: AIAction[] = [];
+  for (const notif of notifications) {
+    if (notif.type === "reminder") {
+      actions.push({ id: "ai-" + notif.id, type: "reminder", message: "AI Reminder sent to " + notif.recipients.length + " recipient(s)", timestamp: notif.createdAt });
+    } else if (notif.type === "re_routed") {
+      actions.push({ id: "ai-reroute-" + notif.id, type: "reassignment", message: "Notification rerouted to available members", timestamp: notif.createdAt });
+    }
+  }
+  for (const esc of escalations) {
+    actions.push({ id: "ai-esc-" + esc.id, type: "escalation", message: "Escalation: " + esc.step + " (" + esc.status + ")", timestamp: esc.createdAt });
+  }
+  return actions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
 
 export default function ComplaintDetail() {
   const { id } = useParams<{ id: string }>();
-  const complaint = complaints.find(c => c.id === id);
+  const { data: complaint, isLoading: loadingComplaint } = useComplaint(id!);
+  const { data: notifications = [], isLoading: loadingNotifs } = useNotificationsForComplaint(id!);
+  const { data: escalations = [], isLoading: loadingEsc } = useEscalationHistory(id!);
+  const triggerEscalation = useTriggerEscalation();
+  const isLoading = loadingComplaint || loadingNotifs || loadingEsc;
 
-  const [aiActions, setAiActions] = useState<AIAction[]>(complaint?.aiActions ?? []);
-  const [timeline, setTimeline] = useState<TimelineEvent[]>(complaint?.timeline ?? []);
-  const [recipients, setRecipients] = useState<Recipient[]>(complaint?.recipients ?? []);
-
-  const triggerReminder = useCallback(() => {
-    const pending = recipients.find(r => !r.seen);
-    if (!pending) { toast.info("All recipients have viewed"); return; }
-    const now = new Date().toISOString();
-    setAiActions(prev => [...prev, { id: `ai-${Date.now()}`, type: "reminder", message: `AI Reminder Sent to ${pending.name} (Polite Tone)`, timestamp: now, tone: "Polite" }]);
-    setTimeline(prev => [...prev, { id: `t-${Date.now()}`, type: "reminder", description: `AI Reminder sent to ${pending.name}`, timestamp: now }]);
-    toast.success(`Reminder sent to ${pending.name}`);
-  }, [recipients]);
-
-  const triggerEscalation = useCallback(() => {
-    const now = new Date().toISOString();
-    setAiActions(prev => [...prev, { id: `ai-${Date.now()}`, type: "escalation", message: "Escalation Triggered — Unresponsive members", timestamp: now }]);
-    setTimeline(prev => [...prev, { id: `t-${Date.now()}`, type: "escalation", description: "Escalation triggered by admin", timestamp: now }]);
-    toast.warning("Escalation triggered");
-  }, []);
-
-  const reassign = useCallback(() => {
-    const pending = recipients.find(r => !r.seen);
-    if (!pending) { toast.info("All recipients have viewed"); return; }
-    const now = new Date().toISOString();
-    const newName = "Maria Lopez";
-    setRecipients(prev => prev.map(r => r.name === pending.name ? { ...r, name: newName, seen: false } : r));
-    setAiActions(prev => [...prev, { id: `ai-${Date.now()}`, type: "reassignment", message: `Reassigned from ${pending.name} to ${newName}`, timestamp: now }]);
-    setTimeline(prev => [...prev, { id: `t-${Date.now()}`, type: "reassignment", description: `Reassigned from ${pending.name} to ${newName}`, timestamp: now }]);
-    toast.success(`Reassigned to ${newName}`);
-  }, [recipients]);
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!complaint) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-lg font-medium text-foreground">Complaint not found</p>
         <Button variant="ghost" asChild className="mt-4">
-          <Link to="/complaints">← Back to Complaints</Link>
+          <Link to="/complaints">Back to Complaints</Link>
         </Button>
       </div>
     );
   }
 
+  const recipients = buildRecipients(notifications);
+  const timeline = buildTimeline(notifications, escalations);
+  const aiActions = buildAiActions(notifications, escalations);
+  const priorityLabel = PRIORITY_LABELS[complaint.priority];
+  const statusLabel = STATUS_LABELS[complaint.status];
+  const categoryLabel = CATEGORY_LABELS[complaint.category];
+
+  const handleTriggerReminder = () => {
+    const notif = notifications[0];
+    if (!notif) { toast.info("No notifications found"); return; }
+    triggerEscalation.mutate({ notificationId: notif.id, step: "reminder" }, {
+      onSuccess: () => toast.success("Reminder triggered"),
+      onError: () => toast.error("Failed to trigger reminder"),
+    });
+  };
+
+  const handleTriggerEscalation = () => {
+    const notif = notifications[0];
+    if (!notif) { toast.info("No notifications found"); return; }
+    triggerEscalation.mutate({ notificationId: notif.id, step: "reroute" }, {
+      onSuccess: () => toast.warning("Escalation triggered"),
+      onError: () => toast.error("Failed to trigger escalation"),
+    });
+  };
+
+  const handleReassign = () => {
+    const notif = notifications[0];
+    if (!notif) { toast.info("No notifications found"); return; }
+    triggerEscalation.mutate({ notificationId: notif.id, step: "multi_channel" }, {
+      onSuccess: () => toast.success("Multi-channel escalation triggered"),
+      onError: () => toast.error("Failed to reassign"),
+    });
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      {/* Header */}
       <div className="flex items-start gap-4">
         <Button variant="ghost" size="icon" asChild className="mt-1 shrink-0">
           <Link to="/complaints"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground tabular-nums">{complaint.id}</span>
-            <StatusBadge priority={complaint.priority}>{complaint.priority}</StatusBadge>
-            <StatusBadge status={complaint.status}>{complaint.status}</StatusBadge>
+            <span className="text-xs font-medium text-muted-foreground tabular-nums">{complaint.id.slice(0, 8)}</span>
+            <StatusBadge priority={priorityLabel as never}>{priorityLabel}</StatusBadge>
+            <StatusBadge status={statusLabel as never}>{statusLabel}</StatusBadge>
           </div>
           <h1 className="mt-2 text-xl font-semibold text-foreground">{complaint.title}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            {complaint.category} · Created {new Date(complaint.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            {categoryLabel} · Created {new Date(complaint.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
           </p>
         </div>
       </div>
 
-      {/* Status Stepper */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-        <StatusStepper current={complaint.status} />
+        <StatusStepper current={statusLabel as never} />
       </motion.div>
 
-      {/* Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Column */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Description */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card-surface p-5">
             <h2 className="text-sm font-semibold text-foreground">Description</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{complaint.description}</p>
           </motion.div>
-
-          {/* Activity Timeline */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h2>
             <ActivityTimeline events={timeline} />
           </motion.div>
         </div>
-
-        {/* Right Column */}
         <div className="space-y-6">
-          {/* Recipient Tracking */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Recipient Tracking</h2>
             <RecipientTracker recipients={recipients} />
           </motion.div>
-
-          {/* AI Actions */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <AIActionPanel
               actions={aiActions}
-              onTriggerReminder={triggerReminder}
-              onTriggerEscalation={triggerEscalation}
-              onReassign={reassign}
+              onTriggerReminder={handleTriggerReminder}
+              onTriggerEscalation={handleTriggerEscalation}
+              onReassign={handleReassign}
             />
           </motion.div>
         </div>

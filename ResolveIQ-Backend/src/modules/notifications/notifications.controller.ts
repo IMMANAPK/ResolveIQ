@@ -7,6 +7,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  @Get()
+  findAll() {
+    return this.notificationsService.findAll();
+  }
+
   @Get(':id/status')
   getStatus(@Param('id') id: string) {
     return this.notificationsService.getNotificationStatus(id);

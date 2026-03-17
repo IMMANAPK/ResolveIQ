@@ -1,39 +1,37 @@
 import { motion } from "framer-motion";
-import { Mail, Eye, Bell, UserCheck, AlertTriangle } from "lucide-react";
-import { StatusBadge } from "@/components/cms/StatusBadge";
-import { adminLogs } from "@/data/mock";
+import { Mail, Bell, UserCheck, AlertTriangle, Loader2 } from "lucide-react";
+import { useNotifications } from "@/hooks/useNotifications";
+import type { ApiNotification } from "@/types/api";
 import { cn } from "@/lib/utils";
 
-const typeIcon: Record<string, React.ElementType> = {
-  email: Mail,
-  view: Eye,
-  reminder: Bell,
-  reassignment: UserCheck,
-  escalation: AlertTriangle,
+const typeConfig: Record<string, { icon: React.ElementType; bg: string; text: string; label: string }> = {
+  initial: { icon: Mail, bg: "bg-status-medium/10", text: "text-status-medium", label: "Email Sent" },
+  reminder: { icon: Bell, bg: "bg-status-ai/10", text: "text-status-ai", label: "AI Reminder" },
+  re_routed: { icon: UserCheck, bg: "bg-status-high/10", text: "text-status-high", label: "Re-routed" },
+  escalation: { icon: AlertTriangle, bg: "bg-status-critical/10", text: "text-status-critical", label: "Escalation" },
 };
 
-const typeBg: Record<string, string> = {
-  email: "bg-status-medium/10",
-  view: "bg-status-success/10",
-  reminder: "bg-status-ai/10",
-  reassignment: "bg-status-high/10",
-  escalation: "bg-status-critical/10",
-};
-
-const typeText: Record<string, string> = {
-  email: "text-status-medium",
-  view: "text-status-success",
-  reminder: "text-status-ai",
-  reassignment: "text-status-high",
-  escalation: "text-status-critical",
-};
+function getTarget(n: ApiNotification): string {
+  const title = n.complaint?.title ?? n.complaintId.slice(0, 8);
+  return `${title} — ${n.recipients.length} recipient(s)`;
+}
 
 export default function AdminPanel() {
+  const { data: notifications = [], isLoading } = useNotifications();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Admin Panel</h1>
-        <p className="mt-1 text-sm text-muted-foreground">System activity logs and audit trail</p>
+        <p className="mt-1 text-sm text-muted-foreground">System notification activity and audit trail</p>
       </div>
 
       <div className="card-surface overflow-hidden">
@@ -41,34 +39,36 @@ export default function AdminPanel() {
           <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Type</div>
           <div className="col-span-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Action</div>
           <div className="col-span-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Target</div>
-          <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">User</div>
+          <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Channel</div>
           <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Timestamp</div>
         </div>
 
         <div className="divide-y divide-border">
-          {adminLogs.map((log, i) => {
-            const Icon = typeIcon[log.type] || Mail;
+          {notifications.length === 0 && (
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground">No activity yet.</div>
+          )}
+          {notifications.map((n, i) => {
+            const cfg = typeConfig[n.type] ?? typeConfig.initial;
+            const Icon = cfg.icon;
             return (
               <motion.div
-                key={log.id}
+                key={n.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.03 }}
                 className="grid grid-cols-1 gap-2 px-5 py-3.5 transition-colors duration-150 hover:bg-muted/30 sm:grid-cols-12 sm:items-center sm:gap-4"
               >
                 <div className="col-span-1">
-                  <div className={cn("flex h-7 w-7 items-center justify-center rounded-md", typeBg[log.type])}>
-                    <Icon className={cn("h-3.5 w-3.5", typeText[log.type])} />
+                  <div className={cn("flex h-7 w-7 items-center justify-center rounded-md", cfg.bg)}>
+                    <Icon className={cn("h-3.5 w-3.5", cfg.text)} />
                   </div>
                 </div>
-                <div className="col-span-3 text-sm font-medium text-foreground">{log.action}</div>
-                <div className="col-span-4 text-sm text-muted-foreground">{log.target}</div>
-                <div className="col-span-2">
-                  <StatusBadge type={log.user.includes("AI") ? "ai" : undefined} className={!log.user.includes("AI") ? "bg-muted text-foreground" : undefined}>
-                    {log.user}
-                  </StatusBadge>
+                <div className="col-span-3 text-sm font-medium text-foreground">{cfg.label}</div>
+                <div className="col-span-4 text-sm text-muted-foreground truncate">{getTarget(n)}</div>
+                <div className="col-span-2 text-xs text-muted-foreground capitalize">{n.channel}</div>
+                <div className="col-span-2 text-xs text-muted-foreground tabular-nums">
+                  {new Date(n.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </div>
-                <div className="col-span-2 text-xs text-muted-foreground tabular-nums">{log.timestamp}</div>
               </motion.div>
             );
           })}

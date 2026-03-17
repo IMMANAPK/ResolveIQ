@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/cms/AppSidebar";
 import { TopBar } from "@/components/cms/TopBar";
+import { useRealtimeTracking } from "@/hooks/useRealtimeTracking";
 import type { UserRole } from "@/data/mock";
 
 interface RoleContextType {
@@ -18,6 +19,7 @@ export function useRole() {
 
 export function CMSLayout() {
   const [role, setRole] = useState<UserRole>("admin");
+  useRealtimeTracking();
 
   return (
     <RoleContext.Provider value={{ role, setRole }}>
