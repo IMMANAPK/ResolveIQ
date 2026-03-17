@@ -73,14 +73,14 @@ export default function Dashboard() {
                     className="flex items-center gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-muted/50"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id.slice(0, 8)}</span>
-                        <StatusBadge priority={priorityLabel as any}>{priorityLabel}</StatusBadge>
+                        <StatusBadge priority={priorityLabel as ("Low" | "Medium" | "High" | "Critical")}>{priorityLabel}</StatusBadge>
+                        <StatusBadge status={statusLabel as ("New" | "In Review" | "In Progress" | "Escalated" | "Resolved")}>{statusLabel}</StatusBadge>
                       </div>
                       <p className="mt-1 truncate text-sm font-medium text-foreground">{c.title}</p>
                     </div>
                     <div className="hidden shrink-0 items-center gap-3 sm:flex">
-                      <StatusBadge status={statusLabel as any}>{statusLabel}</StatusBadge>
                       {recipients.length > 0 && (
                         <span className="text-xs text-muted-foreground">{seen}/{recipients.length} seen</span>
                       )}

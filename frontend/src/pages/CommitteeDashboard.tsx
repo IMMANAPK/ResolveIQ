@@ -126,8 +126,8 @@ export default function CommitteeDashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id.slice(0, 8)}</span>
-                          <StatusBadge priority={priorityLabel as any}>{priorityLabel}</StatusBadge>
-                          <StatusBadge status={statusLabel as any}>{statusLabel}</StatusBadge>
+                          <StatusBadge priority={priorityLabel as ("Low" | "Medium" | "High" | "Critical")}>{priorityLabel}</StatusBadge>
+                          <StatusBadge status={statusLabel as ("New" | "In Review" | "In Progress" | "Escalated" | "Resolved")}>{statusLabel}</StatusBadge>
                           {!isViewed && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-status-high/10 px-2 py-0.5 text-[10px] font-medium text-status-high">
                               <Bell className="h-2.5 w-2.5" /> Needs Review
