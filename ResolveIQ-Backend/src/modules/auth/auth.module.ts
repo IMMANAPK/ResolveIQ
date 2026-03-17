@@ -12,7 +12,7 @@ import { UsersModule } from '../users/users.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'fallback-secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '7d' },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN ?? '7d') as any },
     }),
   ],
   providers: [AuthService, JwtStrategy],
