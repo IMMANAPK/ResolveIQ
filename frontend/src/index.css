@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.5rem;
+
+    /* CMS Custom tokens */
+    --navy: 222 47% 11%;
+    --navy-foreground: 210 40% 98%;
+    --brand: 217 91% 60%;
+    --brand-foreground: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-border: 214 32% 91%;
+
+    /* Status colors */
+    --status-critical: 0 84% 60%;
+    --status-high: 38 92% 50%;
+    --status-medium: 217 91% 60%;
+    --status-low: 160 84% 39%;
+    --status-success: 160 84% 39%;
+    --status-pending: 38 92% 50%;
+    --status-ai: 263 70% 50%;
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 213 31% 91%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 47% 16%;
+    --sidebar-accent-foreground: 213 31% 91%;
+    --sidebar-border: 222 47% 18%;
+    --sidebar-ring: 217 91% 60%;
+    --sidebar-muted: 215 16% 57%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .status-badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .card-surface {
+    @apply bg-card rounded-lg border border-border;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md;
+  }
+
+  .ai-glow {
+    box-shadow: 0 0 0 1px hsl(var(--status-ai) / 0.2), 0 0 16px -4px hsl(var(--status-ai) / 0.15);
+  }
+}
