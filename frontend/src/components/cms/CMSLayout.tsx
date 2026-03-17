@@ -4,8 +4,19 @@ import { AppSidebar } from "@/components/cms/AppSidebar";
 import { TopBar } from "@/components/cms/TopBar";
 import { useRealtimeTracking } from "@/hooks/useRealtimeTracking";
 import { RoleProvider, useRole } from "@/contexts/RoleContext";
+import { useAuth } from "@/contexts/AuthContext";
+import type { UserRole } from "@/types/ui";
 
 export { useRole };
+
+// Which UI roles a given API role is allowed to switch between
+function getAllowedRoles(apiRole?: string): UserRole[] {
+  if (apiRole === "admin") return ["admin", "committee", "complainant"];
+  if (apiRole === "committee_member") return ["committee"];
+  if (apiRole === "complainant") return ["complainant"];
+  if (apiRole === "manager") return ["admin"];
+  return ["admin"];
+}
 
 export function CMSLayout() {
   useRealtimeTracking();
@@ -29,5 +40,7 @@ export function CMSLayout() {
 
 function TopBarWithRole() {
   const { role, setRole } = useRole();
-  return <TopBar role={role} onRoleChange={setRole} />;
+  const { user } = useAuth();
+  const allowedRoles = getAllowedRoles(user?.role);
+  return <TopBar role={role} onRoleChange={setRole} allowedRoles={allowedRoles} />;
 }
