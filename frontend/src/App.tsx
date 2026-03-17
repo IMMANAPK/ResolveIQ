@@ -12,6 +12,7 @@ import AdminPanel from "@/pages/AdminPanel";
 import RoleDashboard from "@/pages/RoleDashboard";
 import NotFound from "@/pages/NotFound";
 import Login from "@/pages/Login";
+import UserManagement from "@/pages/UserManagement";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (user?.role !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -47,6 +55,7 @@ const App = () => (
               <Route path="/complaints/:id" element={<ComplaintDetail />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

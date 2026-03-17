@@ -9,6 +9,8 @@ export interface ApiUser {
   role: ApiUserRole;
   isActive: boolean;
   isAvailable: boolean;
+  department?: string;
+  phone?: string;
   createdAt: string;
   updatedAt: string;
 }
