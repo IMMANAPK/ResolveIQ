@@ -1,17 +1,23 @@
 import { cn } from "@/lib/utils";
-import type { Status } from "@/data/mock";
 import { CheckCircle2 } from "lucide-react";
 
-const steps: Status[] = ["New", "In Review", "In Progress", "Resolved"];
+const steps = ["open", "assigned", "in_progress", "resolved"];
+const stepLabels: Record<string, string> = {
+  open: "Open",
+  assigned: "Assigned",
+  in_progress: "In Progress",
+  resolved: "Resolved",
+};
 
-export function StatusStepper({ current }: { current: Status }) {
-  const isEscalated = current === "Escalated";
-  const currentIdx = isEscalated ? 2 : steps.indexOf(current);
+export function StatusStepper({ current }: { current: string }) {
+  const isEscalated = current === "escalated" || current === "Escalated";
+  const normalizedCurrent = current.toLowerCase();
+  const currentIdx = isEscalated ? 1 : steps.indexOf(normalizedCurrent);
 
   return (
     <div className="flex items-center gap-1">
       {steps.map((step, i) => {
-        const done = i <= currentIdx;
+        const done = i <= currentIdx && currentIdx !== -1;
         const active = i === currentIdx;
         return (
           <div key={step} className="flex items-center gap-1">
@@ -19,10 +25,9 @@ export function StatusStepper({ current }: { current: Status }) {
               "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
               done ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
               active && !isEscalated && "bg-primary text-primary-foreground",
-              active && isEscalated && "bg-status-critical text-destructive-foreground",
             )}>
               {done && i < currentIdx && <CheckCircle2 className="h-3 w-3" />}
-              {step}
+              {stepLabels[step] || step}
             </div>
             {i < steps.length - 1 && (
               <div className={cn("h-px w-4", done ? "bg-primary/40" : "bg-border")} />

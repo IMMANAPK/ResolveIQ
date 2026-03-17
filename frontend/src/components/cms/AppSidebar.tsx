@@ -4,11 +4,11 @@ import {
   Bell,
   Shield,
   Bot,
-  User,
+  User as UserIcon,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
-import { useRole } from "@/components/cms/CMSLayout";
+import { useAuth, UserRole } from "@/context/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -20,7 +20,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import type { UserRole } from "@/data/mock";
 
 interface NavItem {
   title: string;
@@ -35,20 +34,26 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { title: "Notifications", url: "/notifications", icon: Bell },
     { title: "Admin Panel", url: "/admin", icon: Shield },
   ],
-  committee: [
+  manager: [
+    { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    { title: "Complaints", url: "/complaints", icon: FileText },
+    { title: "Notifications", url: "/notifications", icon: Bell },
+  ],
+  committee_member: [
     { title: "My Dashboard", url: "/", icon: LayoutDashboard },
     { title: "All Complaints", url: "/complaints", icon: FileText },
     { title: "Notifications", url: "/notifications", icon: Bell },
   ],
   complainant: [
-    { title: "My Complaints", url: "/", icon: User },
+    { title: "My Complaints", url: "/", icon: UserIcon },
     { title: "Notifications", url: "/notifications", icon: Bell },
   ],
 };
 
 const roleLabels: Record<UserRole, string> = {
   admin: "Admin",
-  committee: "Committee",
+  manager: "Manager",
+  committee_member: "Committee",
   complainant: "Complainant",
 };
 
@@ -56,8 +61,11 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const { role } = useRole();
-  const navItems = navByRole[role];
+  const { user } = useAuth();
+  
+  if (!user) return null;
+  
+  const navItems = navByRole[user.role];
 
   return (
     <Sidebar collapsible="icon">
@@ -70,7 +78,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-sidebar-foreground">ResolveIQ</span>
-              <span className="text-[10px] text-sidebar-muted">{roleLabels[role]} View</span>
+              <span className="text-[10px] text-sidebar-muted">{roleLabels[user.role]} View</span>
             </div>
           )}
         </div>

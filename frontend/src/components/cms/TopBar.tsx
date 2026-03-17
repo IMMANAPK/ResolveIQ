@@ -1,27 +1,20 @@
-import { Search, Bell, ChevronDown } from "lucide-react";
+import { Search, Bell, LogOut } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { UserRole } from "@/data/mock";
+import { User } from "@/context/AuthContext";
 
 interface TopBarProps {
-  role: UserRole;
-  onRoleChange: (role: UserRole) => void;
+  user: User;
+  onLogout: () => void;
 }
 
-const roleLabels: Record<UserRole, string> = {
-  complainant: "Complainant",
-  committee: "Committee Member",
-  admin: "Admin",
-};
+export function TopBar({ user, onLogout }: TopBarProps) {
+  const initials = user.fullName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
 
-export function TopBar({ role, onRoleChange }: TopBarProps) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card px-4">
       <SidebarTrigger className="text-muted-foreground" />
@@ -37,27 +30,25 @@ export function TopBar({ role, onRoleChange }: TopBarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        <div className="hidden text-right sm:block">
+          <p className="text-xs font-medium text-foreground">{user.fullName}</p>
+          <p className="text-[10px] text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
+        </div>
+
         {/* Notifications icon */}
         <Button variant="ghost" size="icon" className="relative text-muted-foreground">
           <Bell className="h-4 w-4" />
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-status-critical" />
         </Button>
 
-        {/* Role Switcher */}
-        <Select value={role} onValueChange={(v) => onRoleChange(v as UserRole)}>
-          <SelectTrigger className="h-9 w-auto gap-2 border-border text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(roleLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>{label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Logout */}
+        <Button variant="ghost" size="icon" onClick={onLogout} className="text-muted-foreground">
+          <LogOut className="h-4 w-4" />
+        </Button>
 
         {/* Avatar */}
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-          AD
+          {initials}
         </div>
       </div>
     </header>

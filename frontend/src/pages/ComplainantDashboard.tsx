@@ -1,23 +1,77 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Clock, CheckCircle, AlertTriangle, Plus, Eye, MessageSquare } from "lucide-react";
+import { FileText, Clock, CheckCircle, AlertTriangle, Plus, Eye, MessageSquare, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/cms/StatCard";
 import { StatusBadge } from "@/components/cms/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { complaints, notifications } from "@/data/mock";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-
-// Simulate complainant's own complaints (first 3)
-const myComplaints = complaints.slice(0, 3);
-const myNotifications = notifications.filter(n =>
-  myComplaints.some(c => c.id === n.complaintId)
-);
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function ComplainantDashboard() {
-  const totalFiled = myComplaints.length;
-  const resolved = myComplaints.filter(c => c.status === "Resolved").length;
-  const inProgress = myComplaints.filter(c => c.status === "In Progress" || c.status === "In Review").length;
-  const escalated = myComplaints.filter(c => c.status === "Escalated").length;
+  const queryClient = useQueryClient();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    category: "other",
+    priority: "medium",
+  });
+
+  const { data: complaints, isLoading, error } = useQuery({
+    queryKey: ['my-complaints'],
+    queryFn: () => apiFetch<any[]>('/complaints/my'),
+  });
+
+  const createComplaintMutation = useMutation({
+    mutationFn: (data: typeof formData) => 
+      apiFetch('/complaints', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-complaints'] });
+      toast.success("Complaint filed successfully");
+      setIsDialogOpen(false);
+      setFormData({ title: "", description: "", category: "other", priority: "medium" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to file complaint");
+    }
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const totalFiled = complaints?.length || 0;
+  const resolved = complaints?.filter(c => c.status === "resolved").length || 0;
+  const inProgress = complaints?.filter(c => ["open", "assigned", "in_progress"].includes(c.status)).length || 0;
+  const escalated = complaints?.filter(c => c.status === "escalated").length || 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -26,9 +80,90 @@ export default function ComplainantDashboard() {
           <h1 className="text-2xl font-semibold text-foreground">My Complaints</h1>
           <p className="mt-1 text-sm text-muted-foreground">Track your filed complaints and their progress</p>
         </div>
-        <Button size="sm" onClick={() => toast.info("New complaint form coming soon!")} className="gap-1.5">
-          <Plus className="h-3.5 w-3.5" /> File Complaint
-        </Button>
+        
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> File Complaint
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>File a New Complaint</DialogTitle>
+              <DialogDescription>
+                Provide details about the issue you're experiencing.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  placeholder="Summarize the issue"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Provide more details..."
+                  className="min-h-[100px]"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="category">Category</Label>
+                  <Select 
+                    value={formData.category} 
+                    onValueChange={(v) => setFormData({ ...formData, category: v })}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hr">HR</SelectItem>
+                      <SelectItem value="it">IT</SelectItem>
+                      <SelectItem value="facilities">Facilities</SelectItem>
+                      <SelectItem value="conduct">Conduct</SelectItem>
+                      <SelectItem value="safety">Safety</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select 
+                    value={formData.priority} 
+                    onValueChange={(v) => setFormData({ ...formData, priority: v })}
+                  >
+                    <SelectTrigger id="priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+              <Button 
+                onClick={() => createComplaintMutation.mutate(formData)}
+                disabled={createComplaintMutation.isPending}
+              >
+                {createComplaintMutation.isPending ? "Filing..." : "File Complaint"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats */}
@@ -39,121 +174,56 @@ export default function ComplainantDashboard() {
         <StatCard title="Escalated" value={escalated} icon={AlertTriangle} color="critical" delay={0.24} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6">
         {/* My Complaints */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Your Filed Complaints</h2>
-          <div className="space-y-3">
-            {myComplaints.map((c, i) => {
-              const seen = c.recipients.filter(r => r.seen).length;
-              const total = c.recipients.length;
-              const pct = Math.round((seen / total) * 100);
-
-              return (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                  className="card-surface p-4 hover-lift"
-                >
-                  <Link to={`/complaints/${c.id}`} className="block">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id}</span>
-                          <StatusBadge priority={c.priority}>{c.priority}</StatusBadge>
-                          <StatusBadge status={c.status}>{c.status}</StatusBadge>
-                        </div>
-                        <h3 className="mt-1.5 text-sm font-medium text-foreground">{c.title}</h3>
-                        <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{c.description}</p>
-                      </div>
-                    </div>
-
-                    {/* View Progress */}
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>{seen}/{total} committee members viewed</span>
-                      </div>
-                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full bg-primary"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ delay: i * 0.06 + 0.3, duration: 0.5 }}
-                        />
-                      </div>
-                      <span className="text-xs font-medium text-muted-foreground tabular-nums">{pct}%</span>
-                    </div>
-
-                    {/* AI Actions count */}
-                    {c.aiActions.length > 0 && (
-                      <div className="mt-2 flex items-center gap-1.5 text-xs text-status-ai">
-                        <MessageSquare className="h-3 w-3" />
-                        <span>{c.aiActions.length} AI action{c.aiActions.length > 1 ? "s" : ""} taken</span>
-                      </div>
-                    )}
-                  </Link>
-
-                  {/* Timeline last event */}
-                  <div className="mt-3 border-t border-border pt-2">
-                    <p className="text-[11px] text-muted-foreground">
-                      Last update: {c.timeline[c.timeline.length - 1]?.description} —{" "}
-                      {new Date(c.timeline[c.timeline.length - 1]?.timestamp).toLocaleDateString("en-US", {
-                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right Sidebar — Updates */}
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Recent Updates</h2>
-          <div className="space-y-2">
-            {myNotifications.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-8 text-center">No updates yet</p>
+          <h2 className="text-sm font-semibold text-foreground">Your Filed Complaints</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {complaints?.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-muted-foreground bg-muted/20 rounded-lg">
+                <FileText className="mx-auto h-12 w-12 opacity-20" />
+                <p className="mt-4">You haven't filed any complaints yet.</p>
+              </div>
             ) : (
-              myNotifications.map((n, i) => (
-                <motion.div
-                  key={n.id}
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className={`card-surface p-3 text-sm transition-colors hover:bg-muted/30 ${!n.read ? "border-l-2 border-l-primary" : ""}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium text-foreground">{n.title}</p>
-                    <StatusBadge priority={n.priority}>{n.priority}</StatusBadge>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground tabular-nums">{n.time}</p>
-                </motion.div>
-              ))
-            )}
-          </div>
+              complaints?.map((c, i) => {
+                return (
+                  <motion.div
+                    key={c.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.06 }}
+                    className="card-surface p-4 hover-lift"
+                  >
+                    <Link to={`/complaints/${c.id}`} className="block">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-muted-foreground tabular-nums truncate max-w-[100px]">{c.id.split('-')[0]}...</span>
+                            <StatusBadge priority={c.priority}>{c.priority}</StatusBadge>
+                            <StatusBadge status={c.status}>{c.status}</StatusBadge>
+                          </div>
+                          <h3 className="mt-1.5 text-sm font-medium text-foreground truncate">{c.title}</h3>
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{c.description}</p>
+                        </div>
+                      </div>
 
-          {/* Status Legend */}
-          <div className="card-surface p-4">
-            <h3 className="text-xs font-semibold text-foreground mb-3">Status Guide</h3>
-            <div className="space-y-2">
-              {(["New", "In Review", "In Progress", "Resolved", "Escalated"] as const).map(s => (
-                <div key={s} className="flex items-center gap-2">
-                  <StatusBadge status={s}>{s}</StatusBadge>
-                  <span className="text-[11px] text-muted-foreground">
-                    {s === "New" && "Your complaint has been filed"}
-                    {s === "In Review" && "Committee is reviewing"}
-                    {s === "In Progress" && "Action is being taken"}
-                    {s === "Resolved" && "Issue has been resolved"}
-                    {s === "Escalated" && "Escalated to higher authority"}
-                  </span>
-                </div>
-              ))}
-            </div>
+                      <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>Filed on {new Date(c.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        {c.aiActions?.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-xs text-status-ai font-medium">
+                            <Bot className="h-3.5 w-3.5" />
+                            <span>{c.aiActions.length} AI Actions</span>
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

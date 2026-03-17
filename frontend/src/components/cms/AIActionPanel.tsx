@@ -1,17 +1,16 @@
 import { Bot, Bell, AlertTriangle, UserCheck, Sparkles } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { Button } from "@/components/ui/button";
-import type { AIAction } from "@/data/mock";
 import { motion } from "framer-motion";
 
-const iconMap: Record<AIAction["type"], React.ElementType> = {
+const iconMap: Record<string, React.ElementType> = {
   reminder: Bell,
   escalation: AlertTriangle,
   reassignment: UserCheck,
 };
 
 interface AIActionPanelProps {
-  actions: AIAction[];
+  actions: any[];
   onTriggerReminder?: () => void;
   onTriggerEscalation?: () => void;
   onReassign?: () => void;
@@ -28,10 +27,12 @@ export function AIActionPanel({ actions, onTriggerReminder, onTriggerEscalation,
         <Sparkles className="h-3.5 w-3.5 text-status-ai" />
       </div>
 
-      {actions.length > 0 ? (
+      {actions && actions.length > 0 ? (
         <div className="space-y-2">
           {actions.map((action, i) => {
-            const Icon = iconMap[action.type];
+            const Icon = iconMap[action.type] || Bot;
+            const timestamp = action.createdAt || action.timestamp;
+            
             return (
               <motion.div
                 key={action.id}
@@ -46,7 +47,7 @@ export function AIActionPanel({ actions, onTriggerReminder, onTriggerEscalation,
                 <div className="flex-1">
                   <p className="text-sm text-foreground">{action.message}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    {new Date(action.timestamp).toLocaleString("en-US", {
+                    {new Date(timestamp).toLocaleString("en-US", {
                       month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
                     })}
                   </p>
