@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
@@ -12,6 +12,8 @@ import { AiModule } from './modules/ai/ai.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
+import { UsersService } from './modules/users/users.service';
+import { UserRole } from './modules/users/entities/user.entity';
 
 @Module({
   imports: [
@@ -28,4 +30,22 @@ import { redisConfig } from './config/redis.config';
     GatewayModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  constructor(private usersService: UsersService) {}
+
+  async onModuleInit() {
+    // Seed default admin if no users exist
+    const adminEmail = 'admin@resolveiq.com';
+    const existingAdmin = await this.usersService.findByEmail(adminEmail);
+    if (!existingAdmin) {
+      console.log('Seeding default admin user...');
+      await this.usersService.createUser({
+        email: adminEmail,
+        password: 'adminpassword',
+        fullName: 'System Administrator',
+        role: UserRole.ADMIN,
+      });
+      console.log('Default admin user created: admin@resolveiq.com / adminpassword');
+    }
+  }
+}

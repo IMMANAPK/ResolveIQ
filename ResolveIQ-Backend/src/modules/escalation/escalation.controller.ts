@@ -15,6 +15,12 @@ export class EscalationController {
     private escalationScheduler: EscalationSchedulerService,
   ) {}
 
+  @Get('history')
+  @Roles(UserRole.ADMIN)
+  getAllHistory() {
+    return this.escalationService.getAllHistory();
+  }
+
   @Get('complaint/:complaintId/history')
   getHistory(@Param('complaintId') complaintId: string) {
     return this.escalationService.getEscalationHistory(complaintId);

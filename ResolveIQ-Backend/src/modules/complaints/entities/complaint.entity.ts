@@ -1,6 +1,9 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
+import { TimelineEvent } from './timeline-event.entity';
+import { AIAction } from './ai-action.entity';
+import { Notification } from '../../notifications/entities/notification.entity';
 
 export enum ComplaintStatus {
   OPEN = 'open',
@@ -8,6 +11,7 @@ export enum ComplaintStatus {
   IN_PROGRESS = 'in_progress',
   RESOLVED = 'resolved',
   CLOSED = 'closed',
+  ESCALATED = 'escalated',
 }
 
 export enum ComplaintPriority {
@@ -55,4 +59,13 @@ export class Complaint extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   resolutionNotes?: string;
+
+  @OneToMany(() => TimelineEvent, (event) => event.complaint)
+  timeline: TimelineEvent[];
+
+  @OneToMany(() => AIAction, (action) => action.complaint)
+  aiActions: AIAction[];
+
+  @OneToMany(() => Notification, (notification) => notification.complaint)
+  notifications: Notification[];
 }

@@ -8,6 +8,10 @@ import * as bcrypt from 'bcrypt';
 export class UsersService {
   constructor(@InjectRepository(User) private repo: Repository<User>) {}
 
+  async findAll(): Promise<User[]> {
+    return this.repo.find({ order: { fullName: 'ASC' } });
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     return this.repo.findOne({ where: { email } });
   }

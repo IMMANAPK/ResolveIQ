@@ -176,4 +176,11 @@ export class EscalationService {
       order: { createdAt: 'ASC' },
     });
   }
+
+  async getAllHistory(): Promise<EscalationLog[]> {
+    return this.logRepo.find({
+      relations: ['complaint', 'targetUser'],
+      order: { createdAt: 'DESC' },
+    });
+  }
 }

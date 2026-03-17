@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Complaint } from '../../complaints/entities/complaint.entity';
+import { User } from '../../users/entities/user.entity';
 
 export enum EscalationStep {
   REMINDER = 'reminder',
@@ -25,6 +26,10 @@ export class EscalationLog extends BaseEntity {
 
   @Column()
   originalNotificationId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn()
+  targetUser: User;
 
   @Column()
   targetUserId: string;
