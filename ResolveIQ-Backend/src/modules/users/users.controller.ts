@@ -17,6 +17,12 @@ export class UsersController {
     return this.usersService.createUser(dto);
   }
 
+  @Get()
+  @Roles(UserRole.ADMIN)
+  findAll() {
+    return this.usersService.findAll();
+  }
+
   @Get('committee')
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   getCommittee() {

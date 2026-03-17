@@ -30,6 +30,10 @@ export class UsersService {
     return this.repo.find({ where: { role: UserRole.MANAGER, isActive: true } });
   }
 
+  async findAll(): Promise<User[]> {
+    return this.repo.find();
+  }
+
   async createUser(data: {
     email: string;
     password: string;
