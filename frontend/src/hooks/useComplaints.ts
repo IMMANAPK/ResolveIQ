@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { ApiComplaint, ApiComplaintStatus } from '@/types/api';
+import type { ApiComplaint, ApiComplaintStatus, ApiComplaintPriority, ApiComplaintCategory } from '@/types/api';
+
+export interface CreateComplaintPayload {
+  title: string;
+  description: string;
+  category: ApiComplaintCategory;
+  priority: ApiComplaintPriority;
+}
 
 export function useComplaints(status?: ApiComplaintStatus) {
   return useQuery<ApiComplaint[]>({
@@ -21,6 +28,17 @@ export function useComplaint(id: string) {
       return data;
     },
     enabled: !!id,
+  });
+}
+
+export function useCreateComplaint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateComplaintPayload) =>
+      api.post<ApiComplaint>('/complaints', payload).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['complaints'] });
+    },
   });
 }
 
