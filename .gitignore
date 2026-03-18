@@ -1,0 +1,11 @@
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+.vscode/launch.json
+!.vscode/extensions.json
+
+#local claude
+.claude
+docs/superpowers/plans/*
+docs/superpowers/specs/*
