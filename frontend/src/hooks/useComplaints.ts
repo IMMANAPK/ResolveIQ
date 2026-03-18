@@ -9,12 +9,24 @@ export interface CreateComplaintPayload {
   priority: ApiComplaintPriority;
 }
 
+/** Fetch all complaints — backend automatically filters to own complaints for complainants */
 export function useComplaints(status?: ApiComplaintStatus) {
   return useQuery<ApiComplaint[]>({
     queryKey: ['complaints', status],
     queryFn: async () => {
       const params = status ? { status } : {};
       const { data } = await api.get<ApiComplaint[]>('/complaints', { params });
+      return data;
+    },
+  });
+}
+
+/** Explicitly fetch only the current user's complaints */
+export function useMyComplaints() {
+  return useQuery<ApiComplaint[]>({
+    queryKey: ['complaints', 'my'],
+    queryFn: async () => {
+      const { data } = await api.get<ApiComplaint[]>('/complaints/my');
       return data;
     },
   });

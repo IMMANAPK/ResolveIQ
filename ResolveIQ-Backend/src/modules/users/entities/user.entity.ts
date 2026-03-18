@@ -21,8 +21,8 @@ export class User extends BaseEntity {
   @Column()
   fullName: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.COMPLAINANT })
-  role: UserRole;
+  @Column({ type: 'simple-array', default: 'complainant' })
+  roles: UserRole[];
 
   @Column({ default: true })
   isActive: boolean;

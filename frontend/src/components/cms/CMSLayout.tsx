@@ -9,13 +9,14 @@ import type { UserRole } from "@/types/ui";
 
 export { useRole };
 
-// Which UI roles a given API role is allowed to switch between
-function getAllowedRoles(apiRole?: string): UserRole[] {
-  if (apiRole === "admin") return ["admin", "committee", "complainant"];
-  if (apiRole === "committee_member") return ["committee"];
-  if (apiRole === "complainant") return ["complainant"];
-  if (apiRole === "manager") return ["admin"];
-  return ["admin"];
+// Which UI roles a user is allowed to switch between based on their assigned roles array
+function getAllowedRoles(apiRoles?: string[]): UserRole[] {
+  if (!apiRoles || apiRoles.length === 0) return ["admin"];
+  const allowed = new Set<UserRole>();
+  if (apiRoles.includes("admin") || apiRoles.includes("manager")) allowed.add("admin");
+  if (apiRoles.includes("committee_member")) allowed.add("committee");
+  if (apiRoles.includes("complainant")) allowed.add("complainant");
+  return allowed.size > 0 ? Array.from(allowed) : ["admin"];
 }
 
 export function CMSLayout() {
@@ -41,6 +42,6 @@ export function CMSLayout() {
 function TopBarWithRole() {
   const { role, setRole } = useRole();
   const { user } = useAuth();
-  const allowedRoles = getAllowedRoles(user?.role);
+  const allowedRoles = getAllowedRoles(user?.roles);
   return <TopBar role={role} onRoleChange={setRole} allowedRoles={allowedRoles} />;
 }

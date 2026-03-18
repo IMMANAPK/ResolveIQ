@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-const VALID_ROLES = ["complainant", "committee_member", "manager"] as const;
+const VALID_ROLES = ["complainant", "committee_member", "manager", "admin"] as const;
 type ValidRole = typeof VALID_ROLES[number];
 type RowStatus = "valid" | "error";
 type ImportResult = "pending" | "created" | "duplicate" | "failed";
@@ -20,7 +20,8 @@ interface ParsedRow {
   rowNum: number;
   fullName: string;
   email: string;
-  role: string;
+  roles: ValidRole[];
+  rolesRaw: string;
   department: string;
   status: RowStatus;
   error: string;
@@ -39,26 +40,39 @@ function isValidEmail(email: string) {
 function validateRow(raw: Record<string, string>, rowNum: number): ParsedRow {
   const fullName = (raw["fullname"] ?? "").trim();
   const email = (raw["email"] ?? "").trim();
-  const role = (raw["role"] ?? "").trim().toLowerCase();
+  const rolesRaw = (raw["roles"] ?? raw["role"] ?? "").trim();
   const department = (raw["department"] ?? "").trim();
 
+  // Parse comma-separated roles
+  const parsedRoles = rolesRaw
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+
+  const base = { rowNum, fullName, email, rolesRaw, roles: [] as ValidRole[], department };
+
   if (fullName.length < 2) {
-    return { rowNum, fullName, email, role, department, status: "error", error: "Full name must be at least 2 characters" };
+    return { ...base, status: "error", error: "Full name must be at least 2 characters" };
   }
   if (!email || !isValidEmail(email)) {
-    return { rowNum, fullName, email, role, department, status: "error", error: "Invalid or missing email" };
+    return { ...base, status: "error", error: "Invalid or missing email" };
   }
-  if (!VALID_ROLES.includes(role as ValidRole)) {
-    return { rowNum, fullName, email, role, department, status: "error", error: "Invalid role — use: complainant, committee_member, or manager" };
+  if (parsedRoles.length === 0) {
+    return { ...base, status: "error", error: "No roles specified" };
   }
-  return { rowNum, fullName, email, role, department, status: "valid", error: "" };
+  const invalid = parsedRoles.find((r) => !VALID_ROLES.includes(r as ValidRole));
+  if (invalid) {
+    return { ...base, status: "error", error: `Invalid role "${invalid}" — use: complainant, committee_member, manager, admin` };
+  }
+  return { ...base, roles: parsedRoles as ValidRole[], status: "valid", error: "" };
 }
 
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ["fullName", "email", "role", "department"],
+    ["fullName", "email", "roles", "department"],
     ["John Doe", "john@example.com", "complainant", ""],
-    ["Jane Smith", "jane@example.com", "committee_member", "Women's Safety Committee"],
+    ["Jane Smith", "jane@example.com", "complainant,committee_member", "Women's Safety Committee"],
+    ["Bob Manager", "bob@example.com", "manager", ""],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Users");
@@ -161,7 +175,7 @@ export function ImportUsersDialog({ open, onOpenChange }: Props) {
         await api.post("/users", {
           email: row.email,
           fullName: row.fullName,
-          role: row.role,
+          roles: row.roles,
           department: row.department || undefined,
           password: "Welcome@123",
         });
@@ -211,7 +225,7 @@ export function ImportUsersDialog({ open, onOpenChange }: Props) {
               Upload an Excel file with columns:{" "}
               <code className="text-xs bg-muted px-1 rounded">fullName</code>,{" "}
               <code className="text-xs bg-muted px-1 rounded">email</code>,{" "}
-              <code className="text-xs bg-muted px-1 rounded">role</code>,{" "}
+              <code className="text-xs bg-muted px-1 rounded">roles</code> (comma-separated),{" "}
               <code className="text-xs bg-muted px-1 rounded">department</code> (optional).
             </p>
 
@@ -240,8 +254,9 @@ export function ImportUsersDialog({ open, onOpenChange }: Props) {
             </div>
 
             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Valid roles:</p>
-              <p><code>complainant</code>, <code>committee_member</code>, <code>manager</code></p>
+              <p className="font-medium text-foreground">Valid roles (comma-separate multiple):</p>
+              <p><code>complainant</code>, <code>committee_member</code>, <code>manager</code>, <code>admin</code></p>
+              <p className="mt-1">Example: <code>complainant,committee_member</code></p>
               <p className="mt-1">Default password <code>Welcome@123</code> will be assigned to all imported users.</p>
             </div>
           </div>
@@ -254,7 +269,7 @@ export function ImportUsersDialog({ open, onOpenChange }: Props) {
               <table className="w-full text-xs">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
-                    {["#", "Full Name", "Email", "Role", "Department", "Status"].map((h) => (
+                    {["#", "Full Name", "Email", "Roles", "Department", "Status"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -265,7 +280,7 @@ export function ImportUsersDialog({ open, onOpenChange }: Props) {
                       <td className="px-3 py-2 text-muted-foreground">{row.rowNum}</td>
                       <td className="px-3 py-2">{row.fullName || <em className="text-muted-foreground">—</em>}</td>
                       <td className="px-3 py-2">{row.email || <em className="text-muted-foreground">—</em>}</td>
-                      <td className="px-3 py-2">{row.role || <em className="text-muted-foreground">—</em>}</td>
+                      <td className="px-3 py-2">{row.rolesRaw || <em className="text-muted-foreground">—</em>}</td>
                       <td className="px-3 py-2">{row.department || <em className="text-muted-foreground">—</em>}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {row.status === "valid" ? (

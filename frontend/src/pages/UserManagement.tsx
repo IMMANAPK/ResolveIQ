@@ -23,6 +23,14 @@ function RoleBadge({ role }: { role: ApiUserRole }) {
   );
 }
 
+function RoleBadges({ roles }: { roles: ApiUserRole[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {roles.map((r) => <RoleBadge key={r} role={r} />)}
+    </div>
+  );
+}
+
 function ActiveBadge({ isActive }: { isActive: boolean }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -100,7 +108,7 @@ export default function UserManagement() {
             >
               <div className="col-span-3 text-sm font-medium text-foreground truncate">{user.fullName}</div>
               <div className="col-span-3 text-sm text-muted-foreground truncate">{user.email}</div>
-              <div className="col-span-2"><RoleBadge role={user.role} /></div>
+              <div className="col-span-2"><RoleBadges roles={user.roles ?? []} /></div>
               <div className="col-span-2 text-sm text-muted-foreground truncate">{user.department || "—"}</div>
               <div className="col-span-1"><ActiveBadge isActive={user.isActive} /></div>
               <div className="col-span-1 text-xs text-muted-foreground tabular-nums">{fmtDate(user.createdAt)}</div>

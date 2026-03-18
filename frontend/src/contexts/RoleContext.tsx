@@ -14,15 +14,16 @@ export function useRole() {
   return useContext(RoleContext);
 }
 
-// Map the real JWT role → UI role switcher type
-function toUiRole(apiRole: ApiUserRole | undefined): UserRole {
-  if (apiRole === "committee_member") return "committee";
-  if (apiRole === "complainant") return "complainant";
-  return "admin"; // admin + manager both use admin view
+// Map an array of API roles → the primary UI role for the initial view
+function toUiRole(apiRoles: ApiUserRole[] | undefined): UserRole {
+  if (!apiRoles || apiRoles.length === 0) return "admin";
+  if (apiRoles.includes("admin") || apiRoles.includes("manager")) return "admin";
+  if (apiRoles.includes("committee_member")) return "committee";
+  return "complainant";
 }
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [role, setRole] = useState<UserRole>(() => toUiRole(user?.role));
+  const [role, setRole] = useState<UserRole>(() => toUiRole(user?.roles));
   return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
 }

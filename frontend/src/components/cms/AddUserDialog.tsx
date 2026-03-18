@@ -1,4 +1,4 @@
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -8,17 +8,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCreateUser } from "@/hooks/useUsers";
 
+const ROLE_OPTIONS = [
+  { value: "complainant",      label: "Complainant" },
+  { value: "committee_member", label: "Committee Member" },
+  { value: "manager",          label: "Manager" },
+  { value: "admin",            label: "Admin" },
+] as const;
+
+type RoleValue = typeof ROLE_OPTIONS[number]["value"];
+
 const schema = z.object({
-  fullName: z.string().min(2, "Full name must be at least 2 characters"),
-  email: z.string().email("Invalid email address"),
-  role: z.enum(["complainant", "committee_member", "manager"] as const),
+  fullName:   z.string().min(2, "Full name must be at least 2 characters"),
+  email:      z.string().email("Invalid email address"),
+  roles:      z.array(z.enum(["complainant", "committee_member", "manager", "admin"] as const))
+                .min(1, "Select at least one role"),
   department: z.string().optional(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password:   z.string().min(6, "Password must be at least 6 characters"),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -34,25 +42,35 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
   const {
     register,
     handleSubmit,
-    control,
     watch,
+    setValue,
     reset,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "complainant", department: "", password: "", fullName: "", email: "" },
+    defaultValues: { roles: ["complainant"], department: "", password: "", fullName: "", email: "" },
   });
 
-  const role = watch("role");
+  const selectedRoles = watch("roles") ?? [];
+  const showDepartment = selectedRoles.includes("committee_member");
+
+  function toggleRole(value: RoleValue) {
+    const current = selectedRoles;
+    if (current.includes(value)) {
+      setValue("roles", current.filter((r) => r !== value), { shouldValidate: true });
+    } else {
+      setValue("roles", [...current, value], { shouldValidate: true });
+    }
+  }
 
   const onSubmit = async (data: FormData) => {
     try {
       await createUser.mutateAsync({
-        email: data.email,
-        password: data.password,
-        fullName: data.fullName,
-        role: data.role,
-        department: data.role === "committee_member" && data.department ? data.department : undefined,
+        email:      data.email,
+        password:   data.password,
+        fullName:   data.fullName,
+        roles:      data.roles,
+        department: showDepartment && data.department ? data.department : undefined,
       });
       toast.success("User created successfully");
       reset();
@@ -89,30 +107,28 @@ export function AddUserDialog({ open, onOpenChange }: Props) {
             {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           </div>
 
-          {/* Role — controlled via Controller so watch("role") always reflects selection */}
+          {/* Roles — multi-checkbox */}
           <div className="space-y-1.5">
-            <Label>Role</Label>
-            <Controller
-              control={control}
-              name="role"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="complainant">Complainant</SelectItem>
-                    <SelectItem value="committee_member">Committee Member</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
+            <Label>Roles</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {ROLE_OPTIONS.map(({ value, label }) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={selectedRoles.includes(value)}
+                    onCheckedChange={() => toggleRole(value)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {errors.roles && <p className="text-xs text-destructive">{errors.roles.message}</p>}
           </div>
 
-          {/* Committee Name — only visible when role = committee_member */}
-          {role === "committee_member" && (
+          {/* Committee Name — only visible when committee_member is selected */}
+          {showDepartment && (
             <div className="space-y-1.5">
               <Label htmlFor="department">Committee Name</Label>
               <Input

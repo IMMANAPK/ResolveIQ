@@ -6,7 +6,7 @@ export interface ApiUser {
   id: string;
   email: string;
   fullName: string;
-  role: ApiUserRole;
+  roles: ApiUserRole[];
   isActive: boolean;
   isAvailable: boolean;
   department?: string;

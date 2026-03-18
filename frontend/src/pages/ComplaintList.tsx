@@ -5,8 +5,11 @@ import { StatusBadge } from "@/components/cms/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useComplaints } from "@/hooks/useComplaints";
 import { PRIORITY_LABELS, STATUS_LABELS } from "@/types/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ComplaintList() {
+  const { user } = useAuth();
+  const isPrivileged = user?.roles?.some((r) => ['admin', 'manager', 'committee_member'].includes(r));
   const { data: complaints, isLoading, error } = useComplaints();
 
   if (isLoading) {
@@ -28,8 +31,14 @@ export default function ComplaintList() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Complaints</h1>
-        <p className="mt-1 text-sm text-muted-foreground">All filed complaints and their current status</p>
+        <h1 className="text-2xl font-semibold text-foreground">
+          {isPrivileged ? "All Complaints" : "My Complaints"}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isPrivileged
+            ? "All filed complaints and their current status"
+            : "Complaints you have filed"}
+        </p>
       </div>
 
       <div className="card-surface overflow-hidden">

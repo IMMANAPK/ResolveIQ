@@ -17,17 +17,18 @@ export class UsersService {
   }
 
   async getAvailableCommitteeMembers(): Promise<User[]> {
-    return this.repo.find({
-      where: { role: UserRole.COMMITTEE_MEMBER, isActive: true, isAvailable: true },
-    });
+    const all = await this.repo.find({ where: { isActive: true, isAvailable: true } });
+    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
   }
 
   async getCommitteeMembers(): Promise<User[]> {
-    return this.repo.find({ where: { role: UserRole.COMMITTEE_MEMBER, isActive: true } });
+    const all = await this.repo.find({ where: { isActive: true } });
+    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
   }
 
   async getManagers(): Promise<User[]> {
-    return this.repo.find({ where: { role: UserRole.MANAGER, isActive: true } });
+    const all = await this.repo.find({ where: { isActive: true } });
+    return all.filter(u => u.roles.includes(UserRole.MANAGER));
   }
 
   async findAll(): Promise<User[]> {
@@ -38,7 +39,7 @@ export class UsersService {
     email: string;
     password: string;
     fullName: string;
-    role: UserRole;
+    roles: UserRole[];
     department?: string;
     phone?: string;
   }): Promise<User> {

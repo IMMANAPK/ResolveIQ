@@ -1,7 +1,15 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import api from '@/lib/api';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
-import type { ApiUser, LoginResponse } from '@/types/api';
+import type { ApiUser, ApiUserRole, LoginResponse } from '@/types/api';
+
+// Migrate users stored with the old single-role format: { role: 'admin' } → { roles: ['admin'] }
+function normalizeUser(u: ApiUser & { role?: ApiUserRole }): ApiUser {
+  if (!u.roles || u.roles.length === 0) {
+    return { ...u, roles: u.role ? [u.role] : [] };
+  }
+  return u;
+}
 
 interface AuthContextType {
   user: ApiUser | null;
@@ -30,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('auth_user');
     if (stored && storedUser) {
       try {
-        const parsedUser = JSON.parse(storedUser) as ApiUser;
+        const parsedUser = normalizeUser(JSON.parse(storedUser) as ApiUser);
         setToken(stored);
         setUser(parsedUser);
         connectSocket(stored);
@@ -58,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('access_token', data.accessToken);
     localStorage.setItem('auth_user', JSON.stringify(data.user));
     setToken(data.accessToken);
-    setUser(data.user);
+    setUser(normalizeUser(data.user));
     connectSocket(data.accessToken);
   }, []);
 

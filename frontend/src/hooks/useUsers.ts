@@ -6,7 +6,7 @@ export interface CreateUserPayload {
   email: string;
   password: string;
   fullName: string;
-  role: 'complainant' | 'committee_member' | 'manager';
+  roles: ('complainant' | 'committee_member' | 'manager' | 'admin')[];
   department?: string;
 }
 
