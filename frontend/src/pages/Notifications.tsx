@@ -6,6 +6,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import type { ApiNotification } from "@/types/api";
 import { PRIORITY_LABELS } from "@/types/api";
 import { StatusBadge } from "@/components/cms/StatusBadge";
+import { useAuth } from "@/contexts/AuthContext";
 
 function getNotifTitle(n: ApiNotification): string {
   switch (n.type) {
@@ -36,6 +37,8 @@ function getNotifPriority(n: ApiNotification): string {
 }
 
 export default function Notifications() {
+  const { user } = useAuth();
+  const isPrivileged = user?.roles?.some((r) => ['admin', 'manager', 'committee_member'].includes(r));
   const { data: notifications = [], isLoading } = useNotifications();
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
@@ -70,8 +73,14 @@ export default function Notifications() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Notifications</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{unreadCount} unread</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {isPrivileged ? "All Notifications" : "My Notifications"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {isPrivileged
+              ? `${unreadCount} unread across all complaints`
+              : `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""} for your complaints`}
+          </p>
         </div>
         <Button variant="outline" size="sm" onClick={markAllRead} className="text-xs">
           Mark all read

@@ -122,6 +122,23 @@ export class NotificationsService {
     });
   }
 
+  /** Returns only notifications where the given user is a recipient */
+  async findForUser(userId: string): Promise<Notification[]> {
+    const recipientRows = await this.recipientRepo.find({
+      where: { recipientId: userId },
+      select: ['notificationId'],
+    });
+    if (recipientRows.length === 0) return [];
+    const notifIds = recipientRows.map((r) => r.notificationId);
+    return this.notifRepo
+      .createQueryBuilder('n')
+      .leftJoinAndSelect('n.recipients', 'r')
+      .leftJoinAndSelect('n.complaint', 'c')
+      .where('n.id IN (:...notifIds)', { notifIds })
+      .orderBy('n.createdAt', 'DESC')
+      .getMany();
+  }
+
   async getNotificationsForComplaint(complaintId: string): Promise<Notification[]> {
     return this.notifRepo.find({
       where: { complaintId },
