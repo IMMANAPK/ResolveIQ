@@ -6,6 +6,7 @@ import {
   Bot,
   User,
   Users,
+  Settings2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -36,6 +37,7 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { title: "Notifications", url: "/notifications", icon: Bell },
     { title: "Admin Panel", url: "/admin", icon: Shield },
     { title: "Users", url: "/users", icon: Users },
+    { title: "Committees", url: "/settings/committees", icon: Settings2 },
   ],
   committee: [
     { title: "My Dashboard", url: "/", icon: LayoutDashboard },

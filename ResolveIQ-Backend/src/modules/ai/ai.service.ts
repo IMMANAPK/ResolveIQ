@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
+import { CommitteesService } from '../committees/committees.service';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
 
@@ -25,8 +26,8 @@ export interface ComplaintRouting {
   confidence: 'high' | 'medium' | 'low';
 }
 
-// Must match exactly what is stored in user.department
-const COMMITTEES = [
+// Fallback hardcoded list used only when DB has no committees yet
+const FALLBACK_COMMITTEES = [
   "Women's Safety Committee",
   "Cleaning Committee",
   "General Committee",
@@ -38,7 +39,7 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private client: Groq;
 
-  constructor() {
+  constructor(private readonly committeesService: CommitteesService) {
     this.client = new Groq({ apiKey: process.env.GROQ_API_KEY });
   }
 
@@ -52,21 +53,32 @@ export class AiService {
   }
 
   /**
-   * Groq AI analyses the complaint title + description and returns
-   * which committee should handle it, plus a short reason.
-   * Falls back to "General Committee" on any error.
+   * Routes a complaint to the correct committee.
+   * 1. Loads committees + descriptions from DB
+   * 2. Sends to Groq AI for routing
+   * 3. Falls back to "General Committee" on any error
    */
   async routeComplaint(title: string, description: string): Promise<ComplaintRouting> {
+    // Load live committees from DB
+    let dbCommittees = await this.committeesService.getCommitteesForAi();
+    const committeeNames = dbCommittees.length > 0
+      ? dbCommittees.map((c) => c.name)
+      : FALLBACK_COMMITTEES;
+
+    const fallback = committeeNames.find((n) => n.toLowerCase().includes('general')) ?? committeeNames[0] ?? 'General Committee';
+
+    const committeeList = dbCommittees.length > 0
+      ? dbCommittees.map((c, i) => {
+          const cats = c.categories.length > 0 ? ` (handles: ${c.categories.join(', ')})` : '';
+          const desc = c.description ? ` — ${c.description}` : '';
+          return `${i + 1}. ${c.name}${cats}${desc}`;
+        }).join('\n')
+      : FALLBACK_COMMITTEES.map((c, i) => `${i + 1}. ${c}`).join('\n');
+
     const prompt = `You are a complaint routing assistant for a corporate complaint management system called ResolveIQ.
 
 Available committees:
-${COMMITTEES.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-
-Committee responsibilities:
-- Women's Safety Committee: workplace harassment, gender discrimination, personal safety, sexual misconduct, unsafe behaviour toward women
-- Cleaning Committee: cleanliness, hygiene, sanitation, waste, dirty spaces, pest control
-- General Committee: IT issues, laptop, computer, software, hardware, internet, general office issues, HR, payroll, leave, facilities, noise, maintenance, anything not covered above
-- Food Committee: cafeteria, food quality, canteen, meals, catering, drinking water, vending machines
+${committeeList}
 
 Complaint to route:
 Title: ${title}
@@ -86,22 +98,21 @@ Respond ONLY with this exact JSON (no markdown fences, no extra text):
       const raw = completion.choices[0]?.message?.content?.trim() ?? '';
       this.logger.log(`Groq routing response: ${raw}`);
 
-      // Strip any accidental markdown code fences
       const cleaned = raw.replace(/```json?|```/g, '').trim();
       const parsed = JSON.parse(cleaned) as ComplaintRouting;
 
-      const matched = COMMITTEES.find(
+      const matched = committeeNames.find(
         (c) => c.toLowerCase() === parsed.committee?.toLowerCase(),
       );
       if (!matched) {
-        this.logger.warn(`Groq returned unknown committee "${parsed.committee}", falling back to General Committee`);
-        return { committee: 'General Committee', reason: 'Defaulted: unrecognised committee from AI', confidence: 'low' };
+        this.logger.warn(`Groq returned unknown committee "${parsed.committee}", falling back to ${fallback}`);
+        return { committee: fallback, reason: 'Defaulted: unrecognised committee from AI', confidence: 'low' };
       }
 
       return { ...parsed, committee: matched };
     } catch (err) {
-      this.logger.error('Groq routing call failed, falling back to General Committee', err);
-      return { committee: 'General Committee', reason: 'AI routing unavailable', confidence: 'low' };
+      this.logger.error('Groq routing call failed, falling back to ' + fallback, err);
+      return { committee: fallback, reason: 'AI routing unavailable', confidence: 'low' };
     }
   }
 

@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { AiModule } from '../ai/ai.module';
+import { CommitteesModule } from '../committees/committees.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AiModule } from '../ai/ai.module';
     EmailModule,
     UsersModule,
     AiModule,
+    CommitteesModule,
   ],
   providers: [ComplaintsService, ComplaintNotifierService],
   controllers: [ComplaintsController],

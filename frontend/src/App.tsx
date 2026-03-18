@@ -13,6 +13,7 @@ import RoleDashboard from "@/pages/RoleDashboard";
 import NotFound from "@/pages/NotFound";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
+import CommitteeSettings from "@/pages/CommitteeSettings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +57,7 @@ const App = () => (
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+              <Route path="/settings/committees" element={<AdminRoute><CommitteeSettings /></AdminRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -75,6 +75,17 @@ export interface ApiEscalationLog {
   updatedAt: string;
 }
 
+export interface ApiCommittee {
+  id: string;
+  name: string;
+  description?: string;
+  categories: ApiComplaintCategory[];
+  managerId?: string;
+  manager?: ApiUser;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LoginResponse {
   accessToken: string;
   user: ApiUser;

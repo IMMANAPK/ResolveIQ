@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
+import { CommitteesService } from '../committees/committees.service';
 import { Complaint, ComplaintStatus } from './entities/complaint.entity';
 import { NotificationType, NotificationChannel } from '../notifications/entities/notification.entity';
 import { User } from '../users/entities/user.entity';
@@ -18,56 +19,48 @@ export class ComplaintNotifierService {
     private emailService: EmailService,
     private usersService: UsersService,
     private aiService: AiService,
+    private committeesService: CommitteesService,
     @InjectRepository(Complaint) private complaintRepo: Repository<Complaint>,
   ) {}
 
-  /**
-   * Main entry point after a complaint is filed.
-   * 1. Ask Groq AI which committee should handle this complaint
-   * 2. Find committee members of that specific committee (by department)
-   * 3. Exclude the person who filed the complaint (they may also be a committee member)
-   * 4. Send notification emails to the selected members
-   * 5. Auto-set complaint status to ASSIGNED
-   */
   async notifyCommittee(complaint: Complaint): Promise<void> {
-    // ── Step 1: AI routing ──────────────────────────────────────────────────
-    const routing = await this.aiService.routeComplaint(complaint.title, complaint.description);
-    this.logger.log(
-      `Groq routed complaint "${complaint.title}" → "${routing.committee}" (${routing.confidence} confidence). Reason: ${routing.reason}`,
-    );
+    let targetCommitteeName: string | null = null;
+    let routingReason = '';
 
-    // ── Step 2: Filter committee members by the AI-chosen committee ─────────
+    const mappedCommittee = await this.committeesService.findByCategory(complaint.category);
+    if (mappedCommittee) {
+      targetCommitteeName = mappedCommittee.name;
+      routingReason = `Category "${complaint.category}" is mapped to ${mappedCommittee.name}`;
+      this.logger.log(`DB mapping: "${complaint.category}" → "${targetCommitteeName}"`);
+    } else {
+      const routing = await this.aiService.routeComplaint(complaint.title, complaint.description);
+      targetCommitteeName = routing.committee;
+      routingReason = routing.reason;
+      this.logger.log(`Groq routed "${complaint.title}" → "${targetCommitteeName}" (${routing.confidence}). Reason: ${routingReason}`);
+    }
+
     const allMembers = await this.usersService.getCommitteeMembers();
     let recipients = allMembers.filter(
-      (u) => u.department?.toLowerCase() === routing.committee.toLowerCase(),
+      (u) => u.department?.toLowerCase() === targetCommitteeName!.toLowerCase(),
     );
 
-    // If no members found for the specific committee, fall back to ALL committee members
     if (recipients.length === 0) {
-      this.logger.warn(
-        `No members found for "${routing.committee}", falling back to all committee members`,
-      );
+      this.logger.warn(`No members found for "${targetCommitteeName}", falling back to all committee members`);
       recipients = allMembers;
     }
 
-    // ── Step 3: Exclude the person who filed the complaint ──────────────────
     const filerExcluded = recipients.filter((u) => u.id !== complaint.raisedById);
     if (filerExcluded.length < recipients.length) {
-      this.logger.log(
-        `Excluded complaint filer (id: ${complaint.raisedById}) from notification recipients`,
-      );
+      this.logger.log(`Excluded complaint filer (id: ${complaint.raisedById}) from recipients`);
     }
     recipients = filerExcluded;
 
     if (recipients.length === 0) {
-      this.logger.warn(
-        `No recipients left after exclusions for complaint ${complaint.id}. Skipping notification.`,
-      );
+      this.logger.warn(`No recipients left after exclusions for complaint ${complaint.id}. Skipping.`);
       return;
     }
 
-    // ── Step 4: Send notifications ──────────────────────────────────────────
-    const messagePrefix = `A new complaint has been submitted and assigned to the ${routing.committee} for review.\n\nReason: ${routing.reason}`;
+    const messagePrefix = `A new complaint has been submitted and assigned to the ${targetCommitteeName} for review.\n\nReason: ${routingReason}`;
     await this.sendNotificationToRecipients({
       complaint,
       recipients,
@@ -75,21 +68,31 @@ export class ComplaintNotifierService {
       messagePrefix,
     });
 
-    // ── Step 5: Auto-set complaint status to ASSIGNED ───────────────────────
     try {
       await this.complaintRepo.update(complaint.id, { status: ComplaintStatus.ASSIGNED });
       this.logger.log(`Complaint ${complaint.id} status set to ASSIGNED`);
     } catch (err) {
-      this.logger.error(`Failed to update complaint ${complaint.id} status to ASSIGNED`, err);
+      this.logger.error(`Failed to update complaint ${complaint.id} status`, err);
     }
   }
 
   async notifyManagers(complaint: Complaint): Promise<void> {
-    const managers = await this.usersService.getManagers();
+    let managers: User[] = [];
+
+    const mappedCommittee = await this.committeesService.findByCategory(complaint.category);
+    if (mappedCommittee?.manager) {
+      managers = [mappedCommittee.manager];
+      this.logger.log(`Escalating to committee manager: ${mappedCommittee.manager.email} (${mappedCommittee.name})`);
+    } else {
+      managers = await this.usersService.getManagers();
+      this.logger.log(`No committee manager found for category "${complaint.category}", notifying all managers`);
+    }
+
     if (managers.length === 0) {
       this.logger.warn(`No managers found for complaint ${complaint.id}`);
       return;
     }
+
     await this.sendNotificationToRecipients({
       complaint,
       recipients: managers,

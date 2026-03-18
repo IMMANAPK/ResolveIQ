@@ -10,6 +10,7 @@ import { EmailModule } from './modules/email/email.module';
 import { EscalationModule } from './modules/escalation/escalation.module';
 import { AiModule } from './modules/ai/ai.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
+import { CommitteesModule } from './modules/committees/committees.module';
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
 
@@ -26,6 +27,7 @@ import { redisConfig } from './config/redis.config';
     EscalationModule,
     AiModule,
     GatewayModule,
+    CommitteesModule,
   ],
 })
 export class AppModule {}
