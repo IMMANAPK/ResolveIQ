@@ -9,11 +9,11 @@ import { useComplaints } from "@/hooks/useComplaints";
 import { useNotifications } from "@/hooks/useNotifications";
 import { STATUS_LABELS, PRIORITY_LABELS, type ApiComplaintStatus } from "@/types/api";
 import { toast } from "sonner";
-
-// Simulate: committee member "John Doe" sees complaints assigned to them (or assuming all fetched are assigned)
-const MEMBER_NAME = "John Doe"; // Eventually this should come from Auth context
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function CommitteeDashboard() {
+  const { user } = useAuth();
+  const MEMBER_NAME = user?.fullName || "Committee Member";
   const { data: complaints = [], isLoading: loadingComplaints } = useComplaints();
   const { data: notifications = [], isLoading: loadingNotifications } = useNotifications();
 
@@ -23,7 +23,7 @@ export default function CommitteeDashboard() {
       // Find notifications for this complaint
       const cNotifs = notifications.filter(n => n.complaintId === c.id);
       const recipients = cNotifs.flatMap(n => n.recipients);
-      const myRecipient = recipients.find(r => (r.user?.fullName || "John Doe") === MEMBER_NAME);
+      const myRecipient = recipients.find(r => r.userId === user?.id);
 
       return {
         ...c,
@@ -37,7 +37,7 @@ export default function CommitteeDashboard() {
         myStatus: myRecipient,
       };
     });
-  }, [complaints, notifications]);
+  }, [complaints, notifications, user?.id]);
 
   // We need to keep some local state to optimistically un-bold the row when clicked
   const [localViews, setLocalViews] = useState<Record<string, boolean>>({});

@@ -72,7 +72,7 @@ function buildAiActions(notifications: ApiNotification[], escalations: ApiEscala
 
 export default function ComplaintDetail() {
   const { id } = useParams<{ id: string }>();
-  const { data: complaint, isLoading: loadingComplaint } = useComplaint(id!);
+  const { data: complaint, isLoading: loadingComplaint, isError: complaintError } = useComplaint(id!);
   const { data: notifications = [], isLoading: loadingNotifs } = useNotificationsForComplaint(id!);
   const { data: escalations = [], isLoading: loadingEsc } = useEscalationHistory(id!);
   const triggerEscalation = useTriggerEscalation();
@@ -82,6 +82,18 @@ export default function ComplaintDetail() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (complaintError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-lg font-semibold text-foreground">Unable to load complaint</p>
+        <p className="text-sm text-muted-foreground">The server may be unavailable. Please try again shortly.</p>
+        <Button variant="outline" asChild className="mt-2">
+          <Link to="/complaints">Back to Complaints</Link>
+        </Button>
       </div>
     );
   }
@@ -100,9 +112,9 @@ export default function ComplaintDetail() {
   const recipients = buildRecipients(notifications);
   const timeline = buildTimeline(notifications, escalations);
   const aiActions = buildAiActions(notifications, escalations);
-  const priorityLabel = PRIORITY_LABELS[complaint.priority];
-  const statusLabel = STATUS_LABELS[complaint.status];
-  const categoryLabel = CATEGORY_LABELS[complaint.category];
+  const priorityLabel = PRIORITY_LABELS[complaint.priority] ?? complaint.priority;
+  const statusLabel = STATUS_LABELS[complaint.status] ?? complaint.status;
+  const categoryLabel = CATEGORY_LABELS[complaint.category] ?? complaint.category;
 
   const handleTriggerReminder = () => {
     const notif = notifications[0];
