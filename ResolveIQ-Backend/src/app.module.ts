@@ -2,8 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { EmailModule } from './modules/email/email.module';
@@ -19,6 +23,7 @@ import { redisConfig } from './config/redis.config';
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRoot(databaseConfig()),
     BullModule.forRoot({ redis: redisConfig() }),
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     ComplaintsModule,
@@ -28,6 +33,9 @@ import { redisConfig } from './config/redis.config';
     AiModule,
     GatewayModule,
     CommitteesModule,
+    EventEmitterModule.forRoot(),
+    WorkflowsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

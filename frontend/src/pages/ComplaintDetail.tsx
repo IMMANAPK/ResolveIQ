@@ -1,15 +1,19 @@
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { ArrowLeft, Loader2, Brain, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/cms/StatusBadge";
 import { StatusStepper } from "@/components/cms/StatusStepper";
 import { RecipientTracker } from "@/components/cms/RecipientTracker";
 import { AIActionPanel } from "@/components/cms/AIActionPanel";
 import { ActivityTimeline } from "@/components/cms/ActivityTimeline";
+import { RunHistory } from "@/components/workflows/RunHistory";
 import type { AIAction, TimelineEvent, Recipient } from "@/types/ui";
-import { useComplaint } from "@/hooks/useComplaints";
+import { useComplaint, useRegenerateSummary } from "@/hooks/useComplaints";
 import { useNotificationsForComplaint } from "@/hooks/useNotifications";
+import { getSocket } from "@/lib/socket";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEscalationHistory, useTriggerEscalation } from "@/hooks/useEscalation";
 import { PRIORITY_LABELS, STATUS_LABELS, CATEGORY_LABELS } from "@/types/api";
 import type { ApiNotification, ApiEscalationLog } from "@/types/api";
@@ -72,11 +76,24 @@ function buildAiActions(notifications: ApiNotification[], escalations: ApiEscala
 
 export default function ComplaintDetail() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const { data: complaint, isLoading: loadingComplaint, isError: complaintError } = useComplaint(id!);
   const { data: notifications = [], isLoading: loadingNotifs } = useNotificationsForComplaint(id!);
   const { data: escalations = [], isLoading: loadingEsc } = useEscalationHistory(id!);
   const triggerEscalation = useTriggerEscalation();
+  const regenerate = useRegenerateSummary();
   const isLoading = loadingComplaint || loadingNotifs || loadingEsc;
+
+  useEffect(() => {
+    if (!complaint?.id) return;
+    const socket = getSocket();
+    socket.emit('join:complaint', complaint.id);
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ['complaints', complaint.id] });
+    };
+    socket.on('complaint.summary.updated', handler);
+    return () => { socket.off('complaint.summary.updated', handler); };
+  }, [complaint?.id, queryClient]);
 
   if (isLoading) {
     return (
@@ -168,6 +185,35 @@ export default function ComplaintDetail() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {complaint.aiSummaryStatus === 'completed' && complaint.aiSummary && (
+            <div className="rounded-lg border bg-blue-50/50 p-4 space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                <Brain className="h-4 w-4" />
+                AI Summary
+              </div>
+              <p className="text-sm text-gray-700">{complaint.aiSummary}</p>
+            </div>
+          )}
+          {(complaint.aiSummaryStatus === 'pending' || (!complaint.aiSummaryStatus && complaint.aiSummary === undefined)) && (
+            <div className="rounded-lg border bg-muted/50 p-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Generating AI summary…
+            </div>
+          )}
+          {complaint.aiSummaryStatus === 'failed' && (
+            <div className="rounded-lg border bg-muted/50 p-4 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Summary unavailable</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => regenerate.mutate(complaint.id)}
+                disabled={regenerate.isPending}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                Regenerate
+              </Button>
+            </div>
+          )}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card-surface p-5">
             <h2 className="text-sm font-semibold text-foreground">Description</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{complaint.description}</p>
@@ -175,6 +221,12 @@ export default function ComplaintDetail() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h2>
             <ActivityTimeline events={timeline} />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">Workflow Runs</h2>
+            <div className="max-h-80 overflow-y-auto border rounded-md">
+              <RunHistory complaintId={complaint.id} />
+            </div>
           </motion.div>
         </div>
         <div className="space-y-6">

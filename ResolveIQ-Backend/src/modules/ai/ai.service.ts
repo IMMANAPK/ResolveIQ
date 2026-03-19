@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { CommitteesService } from '../committees/committees.service';
+import { SettingsService } from '../settings/settings.service';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
 
@@ -20,12 +21,6 @@ export interface GeneratedReminder {
   tone: ReminderTone;
 }
 
-export interface ComplaintRouting {
-  committee: string;
-  reason: string;
-  confidence: 'high' | 'medium' | 'low';
-}
-
 // Fallback hardcoded list used only when DB has no committees yet
 const FALLBACK_COMMITTEES = [
   "Women's Safety Committee",
@@ -37,10 +32,19 @@ const FALLBACK_COMMITTEES = [
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private client: Groq;
 
-  constructor(private readonly committeesService: CommitteesService) {
-    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  constructor(
+    private readonly committeesService: CommitteesService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  private getGroqClient(): Groq {
+    const apiKey = this.settingsService.get<string>('ai.groqApiKey') || process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      this.logger.warn('Groq API Key is not configured.');
+      throw new Error('Groq API Key missing. Please configure it in System Settings.');
+    }
+    return new Groq({ apiKey });
   }
 
   determineTone(priority: string, reminderCount: number): ReminderTone {
@@ -52,68 +56,78 @@ export class AiService {
     return 'polite';
   }
 
-  /**
-   * Routes a complaint to the correct committee.
-   * 1. Loads committees + descriptions from DB
-   * 2. Sends to Groq AI for routing
-   * 3. Falls back to "General Committee" on any error
-   */
-  async routeComplaint(title: string, description: string): Promise<ComplaintRouting> {
-    // Load live committees from DB
-    let dbCommittees = await this.committeesService.getCommitteesForAi();
-    const committeeNames = dbCommittees.length > 0
-      ? dbCommittees.map((c) => c.name)
-      : FALLBACK_COMMITTEES;
+  async routeComplaintWithConfidence(complaint: {
+    title: string;
+    description: string;
+    aiSummary?: string;
+  }): Promise<{ committee: string; confidence: number; reason: string }> {
+    const committees = await this.committeesService.getCommitteesForAi();
+    if (committees.length === 0) {
+      return { committee: 'General Committee', confidence: 0, reason: 'No committees configured' };
+    }
 
-    const fallback = committeeNames.find((n) => n.toLowerCase().includes('general')) ?? committeeNames[0] ?? 'General Committee';
+    const committeeList = committees
+      .map((c) => `- ${c.name}: ${c.description || 'No description'} (categories: ${c.categories.join(', ') || 'none'})`)
+      .join('\n');
 
-    const committeeList = dbCommittees.length > 0
-      ? dbCommittees.map((c, i) => {
-          const cats = c.categories.length > 0 ? ` (handles: ${c.categories.join(', ')})` : '';
-          const desc = c.description ? ` — ${c.description}` : '';
-          return `${i + 1}. ${c.name}${cats}${desc}`;
-        }).join('\n')
-      : FALLBACK_COMMITTEES.map((c, i) => `${i + 1}. ${c}`).join('\n');
+    const summaryContext = complaint.aiSummary ? `\nAI Summary: ${complaint.aiSummary}` : '';
 
-    const prompt = `You are a complaint routing assistant for a corporate complaint management system called ResolveIQ.
+    const prompt = `You are a complaint routing assistant. Route this complaint to the most appropriate committee.
 
-Available committees:
+Available Committees:
 ${committeeList}
 
-Complaint to route:
-Title: ${title}
-Description: ${description}
+Complaint Title: ${complaint.title}
+Complaint Description: ${complaint.description}${summaryContext}
 
-Respond ONLY with this exact JSON (no markdown fences, no extra text):
-{"committee":"<exact committee name from list>","reason":"<one sentence why>","confidence":"high|medium|low"}`;
+Respond in JSON format ONLY:
+{"committee": "Committee Name", "confidence": 0.0-1.0, "reason": "one sentence explanation"}`;
 
+    const response = await this.getGroqClient().chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 150,
+      temperature: 0.1,
+    });
+
+    const text = response.choices[0]?.message?.content?.trim() ?? '';
     try {
-      const completion = await this.client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 150,
-        temperature: 0.1,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const raw = completion.choices[0]?.message?.content?.trim() ?? '';
-      this.logger.log(`Groq routing response: ${raw}`);
-
-      const cleaned = raw.replace(/```json?|```/g, '').trim();
-      const parsed = JSON.parse(cleaned) as ComplaintRouting;
-
-      const matched = committeeNames.find(
-        (c) => c.toLowerCase() === parsed.committee?.toLowerCase(),
-      );
-      if (!matched) {
-        this.logger.warn(`Groq returned unknown committee "${parsed.committee}", falling back to ${fallback}`);
-        return { committee: fallback, reason: 'Defaulted: unrecognised committee from AI', confidence: 'low' };
-      }
-
-      return { ...parsed, committee: matched };
-    } catch (err) {
-      this.logger.error('Groq routing call failed, falling back to ' + fallback, err);
-      return { committee: fallback, reason: 'AI routing unavailable', confidence: 'low' };
+      const parsed = JSON.parse(text);
+      return {
+        committee: parsed.committee ?? 'General Committee',
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        reason: parsed.reason ?? 'AI routing',
+      };
+    } catch {
+      return { committee: 'General Committee', confidence: 0, reason: 'Failed to parse AI response' };
     }
+  }
+
+  async generateSummary(complaint: {
+    title: string;
+    description: string;
+    category: string;
+    priority: string;
+  }): Promise<string> {
+    const prompt = `You are a complaint summarizer. Generate a concise 2-3 sentence summary of this complaint for internal review.
+
+Title: ${complaint.title}
+Category: ${complaint.category}
+Priority: ${complaint.priority}
+Description: ${complaint.description}
+
+Respond with ONLY the summary text, no labels or formatting.`;
+
+    const response = await this.getGroqClient().chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 200,
+      temperature: 0.3,
+    });
+
+    const summary = response.choices[0]?.message?.content?.trim();
+    if (!summary) throw new Error('AI returned empty summary');
+    return summary;
   }
 
   buildReminderPrompt(ctx: ReminderPromptContext): string {
@@ -147,7 +161,7 @@ Subject: <subject line>
 
   async generateReminderEmail(ctx: ReminderPromptContext): Promise<GeneratedReminder> {
     try {
-      const completion = await this.client.chat.completions.create({
+      const completion = await this.getGroqClient().chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         max_tokens: 512,
         messages: [{ role: 'user', content: this.buildReminderPrompt(ctx) }],

@@ -30,6 +30,9 @@ export interface ApiComplaint {
   raisedById: string;
   resolvedAt?: string;
   resolutionNotes?: string;
+  aiSummary?: string;
+  aiSummaryStatus?: 'pending' | 'completed' | 'failed';
+  aiSummaryError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,9 +89,75 @@ export interface ApiCommittee {
   updatedAt: string;
 }
 
+export interface ApiNotificationRule {
+  id: string;
+  committeeId: string;
+  type: 'default' | 'conditional';
+  condition?: { field: 'priority' | 'category'; op: 'eq' | 'neq'; value: string };
+  recipientUserIds: string[];
+  recipientRoles: string[];
+  order: number;
+}
+
 export interface LoginResponse {
   accessToken: string;
   user: ApiUser;
+}
+
+export interface ApiWorkflowNode {
+  id: string;
+  type: 'trigger' | 'ai_prompt' | 'condition' | 'send_notification' | 'send_email' | 'update_complaint' | 'delay';
+  config: Record<string, unknown>;
+  position?: { x: number; y: number }; 
+}
+
+export interface ApiWorkflowEdge {
+  from: string;
+  to: string;
+  condition?: 'true' | 'false';
+}
+
+export interface ApiWorkflowDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  trigger: { type: 'event' | 'manual'; event?: string };
+  definition: { schemaVersion: number; nodes: ApiWorkflowNode[]; edges: ApiWorkflowEdge[] };
+  schemaVersion: number;
+  definitionVersion: number;
+  isActive: boolean;
+  maxRunDurationSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ApiWorkflowRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+
+export interface ApiWorkflowRun {
+  id: string;
+  workflowId: string;
+  definitionVersion: number;
+  complaintId: string;
+  status: ApiWorkflowRunStatus;
+  triggeredBy: 'event' | 'manual';
+  context: Record<string, unknown>;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface ApiWorkflowStepLog {
+  id: string;
+  runId: string;
+  nodeId: string;
+  nodeType: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  skippedReason?: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
 }
 
 // Display mappers

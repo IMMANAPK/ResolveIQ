@@ -28,4 +28,8 @@ export class EventsGateway {
   emitPushNotification(data: { userId: string; title: string; body: string; complaintId: string }) {
     this.server.emit(`push:${data.userId}`, data);
   }
+
+  emitSummaryUpdated(complaintId: string) {
+    this.server.to(`complaint:${complaintId}`).emit('complaint.summary.updated', { complaintId });
+  }
 }

@@ -7,7 +7,7 @@ const mockUser: Partial<User> = {
   id: 'uuid-1',
   email: 'test@test.com',
   fullName: 'Test User',
-  role: UserRole.COMPLAINANT,
+  roles: [UserRole.COMPLAINANT],
   isActive: true,
   isAvailable: true,
 };

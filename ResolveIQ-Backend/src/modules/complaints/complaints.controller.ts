@@ -65,4 +65,19 @@ export class ComplaintsController {
   ) {
     return this.complaintsService.updateStatus(id, body.status, body.resolutionNotes);
   }
+
+  @Post(':id/regenerate-summary')
+  async regenerateSummary(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; roles?: string[] },
+  ) {
+    const roles: string[] = user.roles ?? [];
+    const isPrivileged = roles.some((r) => PRIVILEGED_ROLES.includes(r));
+    if (!isPrivileged) {
+      throw new ForbiddenException('Only privileged users can regenerate summaries');
+    }
+    
+    await this.complaintsService.regenerateSummary(id);
+    return { message: 'Summary regeneration queued' };
+  }
 }

@@ -24,68 +24,21 @@ export class ComplaintNotifierService {
   ) {}
 
   async notifyCommittee(complaint: Complaint): Promise<void> {
-    let targetCommitteeName: string | null = null;
-    let routingReason = '';
-
-    const mappedCommittee = await this.committeesService.findByCategory(complaint.category);
-    if (mappedCommittee) {
-      targetCommitteeName = mappedCommittee.name;
-      routingReason = `Category "${complaint.category}" is mapped to ${mappedCommittee.name}`;
-      this.logger.log(`DB mapping: "${complaint.category}" → "${targetCommitteeName}"`);
-    } else {
-      const routing = await this.aiService.routeComplaint(complaint.title, complaint.description);
-      targetCommitteeName = routing.committee;
-      routingReason = routing.reason;
-      this.logger.log(`Groq routed "${complaint.title}" → "${targetCommitteeName}" (${routing.confidence}). Reason: ${routingReason}`);
-    }
-
-    const allMembers = await this.usersService.getCommitteeMembers();
-    let recipients = allMembers.filter(
-      (u) => u.department?.toLowerCase() === targetCommitteeName!.toLowerCase(),
-    );
-
-    if (recipients.length === 0) {
-      this.logger.warn(`No members found for "${targetCommitteeName}", falling back to all committee members`);
-      recipients = allMembers;
-    }
-
-    const filerExcluded = recipients.filter((u) => u.id !== complaint.raisedById);
-    if (filerExcluded.length < recipients.length) {
-      this.logger.log(`Excluded complaint filer (id: ${complaint.raisedById}) from recipients`);
-    }
-    recipients = filerExcluded;
-
-    if (recipients.length === 0) {
-      this.logger.warn(`No recipients left after exclusions for complaint ${complaint.id}. Skipping.`);
-      return;
-    }
-
-    const messagePrefix = `A new complaint has been submitted and assigned to the ${targetCommitteeName} for review.\n\nReason: ${routingReason}`;
-    await this.sendNotificationToRecipients({
-      complaint,
-      recipients,
-      type: NotificationType.INITIAL,
-      messagePrefix,
-    });
-
-    try {
-      await this.complaintRepo.update(complaint.id, { status: ComplaintStatus.ASSIGNED });
-      this.logger.log(`Complaint ${complaint.id} status set to ASSIGNED`);
-    } catch (err) {
-      this.logger.error(`Failed to update complaint ${complaint.id} status`, err);
-    }
+    this.logger.log(`notifyCommittee called for ${complaint.id} - legacy routing handled by Phase 2 routing queue`);
   }
 
   async notifyManagers(complaint: Complaint): Promise<void> {
     let managers: User[] = [];
 
-    const mappedCommittee = await this.committeesService.findByCategory(complaint.category);
-    if (mappedCommittee?.manager) {
-      managers = [mappedCommittee.manager];
-      this.logger.log(`Escalating to committee manager: ${mappedCommittee.manager.email} (${mappedCommittee.name})`);
+    if (complaint.committeeId) {
+      const mappedCommittee = await this.committeesService.findById(complaint.committeeId);
+      if (mappedCommittee?.manager) {
+        managers = [mappedCommittee.manager];
+        this.logger.log(`Escalating to committee manager: ${mappedCommittee.manager.email} (${mappedCommittee.name})`);
+      }
     } else {
       managers = await this.usersService.getManagers();
-      this.logger.log(`No committee manager found for category "${complaint.category}", notifying all managers`);
+      this.logger.log(`No committee manager found for complaint "${complaint.id}", notifying all managers`);
     }
 
     if (managers.length === 0) {
@@ -98,6 +51,28 @@ export class ComplaintNotifierService {
       recipients: managers,
       type: NotificationType.ESCALATION,
       messagePrefix: 'This complaint has been escalated to management level.',
+    });
+  }
+
+  async sendToRecipientIds(opts: {
+    complaint: Complaint;
+    recipientUserIds: string[];
+    includeAiSummary: boolean;
+  }): Promise<void> {
+    const { complaint, recipientUserIds, includeAiSummary } = opts;
+    const recipients = await this.usersService.findByIds(recipientUserIds);
+    if (!recipients.length) return;
+
+    let messagePrefix = `A new complaint has been routed for your review.`;
+    if (includeAiSummary && complaint.aiSummary) {
+      messagePrefix += `\n\nAI Summary:\n${complaint.aiSummary}`;
+    }
+
+    await this.sendNotificationToRecipients({
+      complaint,
+      recipients,
+      type: NotificationType.INITIAL,
+      messagePrefix,
     });
   }
 

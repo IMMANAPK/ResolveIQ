@@ -7,6 +7,8 @@ import {
   User,
   Users,
   Settings2,
+  GitBranch,
+  Settings,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -38,6 +40,8 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { title: "Admin Panel", url: "/admin", icon: Shield },
     { title: "Users", url: "/users", icon: Users },
     { title: "Committees", url: "/settings/committees", icon: Settings2 },
+    { title: "Workflows", url: "/admin/workflows", icon: GitBranch },
+    { title: "Settings", url: "/admin/settings", icon: Settings },
   ],
   committee: [
     { title: "My Dashboard", url: "/", icon: LayoutDashboard },

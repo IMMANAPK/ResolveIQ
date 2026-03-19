@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { SettingsService } from '../settings/settings.service';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const sgMail = require('@sendgrid/mail').default ?? require('@sendgrid/mail');
 import { buildNotificationEmailHtml, NotificationEmailContext } from './templates/notification.template';

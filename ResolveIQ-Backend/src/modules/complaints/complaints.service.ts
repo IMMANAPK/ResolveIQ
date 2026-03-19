@@ -1,8 +1,11 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from './entities/complaint.entity';
+import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory, AiSummaryStatus } from './entities/complaint.entity';
 import { ComplaintNotifierService } from './complaint-notifier.service';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface CreateComplaintData {
   title: string;
@@ -17,8 +20,10 @@ export class ComplaintsService {
   private readonly logger = new Logger(ComplaintsService.name);
 
   constructor(
-    @InjectRepository(Complaint) private repo: Repository<Complaint>,
-    private notifier: ComplaintNotifierService,
+    @InjectRepository(Complaint) private readonly repo: Repository<Complaint>,
+    private readonly notifier: ComplaintNotifierService,
+    @InjectQueue('ai-summary') private readonly aiSummaryQueue: Queue,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(data: CreateComplaintData): Promise<Complaint> {
@@ -53,14 +58,43 @@ export class ComplaintsService {
     complaint.status = status;
     if (resolutionNotes) complaint.resolutionNotes = resolutionNotes;
     if (status === ComplaintStatus.RESOLVED) complaint.resolvedAt = new Date();
-    return this.repo.save(complaint);
+    const saved = await this.repo.save(complaint);
+    this.eventEmitter.emit('complaint.status_changed', { complaintId: id, newStatus: status });
+    return saved;
   }
 
   async createAndNotify(data: CreateComplaintData): Promise<Complaint> {
-    const complaint = await this.create(data);
-    this.notifier.notifyCommittee(complaint).catch((err) =>
-      this.logger.error('Failed to notify committee', err),
+    // Create base complaint, then stamp AI summary fields directly on the entity
+    const entity = this.repo.create({
+      ...data,
+      aiSummaryStatus: AiSummaryStatus.PENDING,
+      aiSummaryRequestedAt: new Date(),
+    });
+    const complaint = await this.repo.save(entity);
+
+    await this.aiSummaryQueue.add(
+      { complaintId: complaint.id },
+      { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
     );
+
+    this.eventEmitter.emit('complaint.created', { complaintId: complaint.id });
+
     return complaint;
+  }
+
+  async regenerateSummary(id: string): Promise<void> {
+    const complaint = await this.findOrFail(id);
+
+    await this.repo.update(id, {
+      aiSummaryStatus: AiSummaryStatus.PENDING,
+      aiSummaryRequestedAt: new Date(),
+      aiSummaryError: null as any,
+      aiSummary: null as any,
+    });
+
+    await this.aiSummaryQueue.add(
+      { complaintId: id },
+      { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
   }
 }

@@ -14,6 +14,9 @@ import NotFound from "@/pages/NotFound";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
 import CommitteeSettings from "@/pages/CommitteeSettings";
+import WorkflowList from "@/pages/WorkflowList";
+import WorkflowBuilder from "@/pages/WorkflowBuilder";
+import SystemSettings from "@/pages/SystemSettings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +59,9 @@ const App = () => (
               <Route path="/complaints/:id" element={<ComplaintDetail />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/admin/workflows" element={<AdminRoute><WorkflowList /></AdminRoute>} />
+              <Route path="/admin/workflows/:id" element={<AdminRoute><WorkflowBuilder /></AdminRoute>} />
+              <Route path="/admin/settings" element={<AdminRoute><SystemSettings /></AdminRoute>} />
               <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
               <Route path="/settings/committees" element={<AdminRoute><CommitteeSettings /></AdminRoute>} />
             </Route>

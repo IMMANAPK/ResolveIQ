@@ -65,3 +65,13 @@ export function useUpdateComplaintStatus() {
     },
   });
 }
+
+export function useRegenerateSummary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/complaints/${id}/regenerate-summary`),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['complaints', id] });
+    },
+  });
+}
