@@ -4,6 +4,13 @@ import { CommitteesService } from '../committees/committees.service';
 import { SettingsService } from '../settings/settings.service';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
+export type EscalationDecisionStep = 'reminder' | 'reroute' | 'multi_channel' | 'skip';
+
+export interface EscalationDecision {
+  shouldEscalate: boolean;
+  step: EscalationDecisionStep;
+  reason: string;
+}
 
 export interface ReminderPromptContext {
   recipientName: string;
@@ -179,6 +186,85 @@ Subject: <subject line>
       this.logger.error('Groq reminder generation failed, using fallback', err);
       return this.fallbackReminder(ctx);
     }
+  }
+
+  async decideEscalationAction(context: {
+    complaintTitle: string;
+    complaintDescription: string;
+    priority: string;
+    ageMinutes: number;
+    reminderCount: number;
+  }): Promise<EscalationDecision> {
+    const { complaintTitle, complaintDescription, priority, ageMinutes, reminderCount } = context;
+    const hoursElapsed = (ageMinutes / 60).toFixed(1);
+
+    const prompt = `You are an AI escalation advisor for a complaint management system called ResolveIQ.
+
+A complaint has not been acknowledged by the assigned committee members. Decide what escalation action to take RIGHT NOW.
+
+Complaint Details:
+- Title: ${complaintTitle}
+- Description: ${complaintDescription}
+- Priority: ${priority.toUpperCase()}
+- Time since notification was sent: ${hoursElapsed} hours (${ageMinutes} minutes)
+- Number of reminders already sent: ${reminderCount}
+
+Escalation steps available:
+- "reminder": Send another email reminder to the original recipients (appropriate for early-stage, low reminder counts)
+- "reroute": Re-route the complaint to other available committee members (appropriate when original recipients are clearly unresponsive)
+- "multi_channel": Trigger critical push notifications and in-app alerts (appropriate for critical/high priority complaints with long delays)
+- "skip": Do nothing yet, it is too early or not urgent enough to escalate
+
+Decision rules to consider:
+- Critical priority complaints should escalate faster
+- If reminderCount >= 3, prefer reroute or multi_channel over another reminder
+- If ageMinutes < 30 and priority is low/medium, prefer skip
+- Use multi_channel only when the situation is truly urgent (high priority + long delay, or critical priority)
+
+Respond in JSON format ONLY (no explanation outside JSON):
+{"shouldEscalate": true/false, "step": "reminder|reroute|multi_channel|skip", "reason": "one sentence explanation"}`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 150,
+        temperature: 0.1,
+      });
+
+      const text = response.choices[0]?.message?.content?.trim() ?? '';
+      // Strip markdown code fences if present
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const step: EscalationDecisionStep = ['reminder', 'reroute', 'multi_channel', 'skip'].includes(parsed.step)
+        ? parsed.step
+        : 'reminder';
+      return {
+        shouldEscalate: parsed.shouldEscalate !== false && step !== 'skip',
+        step,
+        reason: parsed.reason ?? 'AI escalation decision',
+      };
+    } catch (err) {
+      this.logger.error('AI escalation decision failed, using fallback logic', err);
+      return this.fallbackEscalationDecision(priority, ageMinutes, reminderCount);
+    }
+  }
+
+  private fallbackEscalationDecision(
+    priority: string,
+    ageMinutes: number,
+    reminderCount: number,
+  ): EscalationDecision {
+    if (ageMinutes >= 360 || (priority === 'critical' && ageMinutes >= 120)) {
+      return { shouldEscalate: true, step: 'multi_channel', reason: 'Fallback: critical threshold reached' };
+    }
+    if (ageMinutes >= 180 || (priority === 'high' && ageMinutes >= 90 && reminderCount >= 1)) {
+      return { shouldEscalate: true, step: 'reroute', reason: 'Fallback: reroute threshold reached' };
+    }
+    if (ageMinutes >= 60) {
+      return { shouldEscalate: true, step: 'reminder', reason: 'Fallback: reminder threshold reached' };
+    }
+    return { shouldEscalate: false, step: 'skip', reason: 'Fallback: too early to escalate' };
   }
 
   private fallbackReminder(ctx: ReminderPromptContext): GeneratedReminder {
