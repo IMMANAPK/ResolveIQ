@@ -23,14 +23,16 @@ function buildRecipients(notifications: ApiNotification[]): Recipient[] {
   const seen = new Map<string, Recipient>();
   for (const notif of notifications) {
     for (const r of notif.recipients) {
-      const name = r.user?.fullName ?? r.userId;
+      // Backend entity uses `recipient` (User relation) and `recipientId` (FK)
+      const name = r.recipient?.fullName ?? r.recipientId ?? "Unknown";
       const time = r.readAt
         ? new Date(r.readAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         : undefined;
-      if (!seen.has(r.userId)) {
-        seen.set(r.userId, { name, seen: r.isRead, time });
-      } else if (r.isRead && !seen.get(r.userId)!.seen) {
-        seen.set(r.userId, { name, seen: true, time });
+      const key = r.recipientId ?? r.id;
+      if (!seen.has(key)) {
+        seen.set(key, { name, seen: r.isRead, time });
+      } else if (r.isRead && !seen.get(key)!.seen) {
+        seen.set(key, { name, seen: true, time });
       }
     }
   }
@@ -49,7 +51,7 @@ function buildTimeline(notifications: ApiNotification[], escalations: ApiEscalat
     }
     for (const r of notif.recipients) {
       if (r.isRead && r.readAt) {
-        events.push({ id: "viewed-" + r.id, type: "viewed", description: "Viewed by " + (r.user?.fullName ?? r.userId), timestamp: r.readAt, user: r.user?.fullName });
+        events.push({ id: "viewed-" + r.id, type: "viewed", description: "Viewed by " + (r.recipient?.fullName ?? r.recipientId ?? "Unknown"), timestamp: r.readAt, user: r.recipient?.fullName });
       }
     }
   }
@@ -194,7 +196,7 @@ export default function ComplaintDetail() {
               <p className="text-sm text-gray-700">{complaint.aiSummary}</p>
             </div>
           )}
-          {(complaint.aiSummaryStatus === 'pending' || (!complaint.aiSummaryStatus && complaint.aiSummary === undefined)) && (
+          {complaint.aiSummaryStatus === 'pending' && (
             <div className="rounded-lg border bg-muted/50 p-4 flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Generating AI summary…

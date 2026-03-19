@@ -72,10 +72,15 @@ export class ComplaintsService {
     });
     const complaint = await this.repo.save(entity);
 
-    await this.aiSummaryQueue.add(
-      { complaintId: complaint.id },
-      { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+    // Fire-and-forget — never let queue issues block the HTTP response
+    this.aiSummaryQueue
+      .add(
+        { complaintId: complaint.id },
+        { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      )
+      .catch((err) =>
+        this.logger.error(`Failed to queue AI summary for complaint ${complaint.id}: ${err}`),
+      );
 
     this.eventEmitter.emit('complaint.created', { complaintId: complaint.id });
 
@@ -92,9 +97,14 @@ export class ComplaintsService {
       aiSummary: null as any,
     });
 
-    await this.aiSummaryQueue.add(
-      { complaintId: id },
-      { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+    // Fire-and-forget — same pattern as createAndNotify
+    this.aiSummaryQueue
+      .add(
+        { complaintId: id },
+        { timeout: 30000, attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+      )
+      .catch((err) =>
+        this.logger.error(`Failed to re-queue AI summary for complaint ${id}: ${err}`),
+      );
   }
 }

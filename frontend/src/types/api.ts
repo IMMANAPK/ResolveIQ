@@ -41,8 +41,10 @@ export type ApiDeliveryStatus = 'pending' | 'sent' | 'failed' | 'read';
 
 export interface ApiRecipient {
   id: string;
-  userId: string;
-  user: ApiUser;
+  /** backend entity field — matches NotificationRecipient.recipientId */
+  recipientId: string;
+  /** populated when backend loads relations: ['recipients.recipient'] */
+  recipient?: ApiUser;
   deliveryStatus: ApiDeliveryStatus;
   trackingId: string;
   isRead: boolean;

@@ -1,16 +1,21 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ComplaintStatus } from './entities/complaint.entity';
+import { WorkflowEngineService } from '../workflows/workflow-engine.service';
 
 const PRIVILEGED_ROLES = ['admin', 'manager', 'committee_member'];
 
 @Controller('complaints')
 @UseGuards(JwtAuthGuard)
 export class ComplaintsController {
-  constructor(private readonly complaintsService: ComplaintsService) {}
+  constructor(
+    private readonly complaintsService: ComplaintsService,
+    @Inject(forwardRef(() => WorkflowEngineService))
+    private readonly engineService: WorkflowEngineService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateComplaintDto, @CurrentUser() user: { id: string }) {
@@ -64,6 +69,16 @@ export class ComplaintsController {
     @Body() body: { status: ComplaintStatus; resolutionNotes?: string },
   ) {
     return this.complaintsService.updateStatus(id, body.status, body.resolutionNotes);
+  }
+
+  @Get(':id/workflow-runs')
+  async getWorkflowRuns(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; roles?: string[] },
+  ) {
+    // Check permission - reuse findOne permission logic
+    await this.findOne(id, user); 
+    return this.engineService.getRunsForComplaint(id);
   }
 
   @Post(':id/regenerate-summary')

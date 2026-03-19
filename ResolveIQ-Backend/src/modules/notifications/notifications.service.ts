@@ -142,7 +142,7 @@ export class NotificationsService {
   async getNotificationsForComplaint(complaintId: string): Promise<Notification[]> {
     return this.notifRepo.find({
       where: { complaintId },
-      relations: ['recipients'],
+      relations: ['recipients', 'recipients.recipient'],
       order: { createdAt: 'DESC' },
     });
   }

@@ -23,12 +23,12 @@ export default function CommitteeDashboard() {
       // Find notifications for this complaint
       const cNotifs = notifications.filter(n => n.complaintId === c.id);
       const recipients = cNotifs.flatMap(n => n.recipients);
-      const myRecipient = recipients.find(r => r.userId === user?.id);
+      const myRecipient = recipients.find(r => r.recipientId === user?.id);
 
       return {
         ...c,
         mappedRecipients: recipients.map(r => ({
-          name: r.user?.fullName || "Unknown",
+          name: r.recipient?.fullName || "Unknown",
           seen: r.isRead,
           time: r.readAt ? new Date(r.readAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
           id: r.id

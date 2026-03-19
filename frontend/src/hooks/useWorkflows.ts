@@ -71,7 +71,7 @@ export function useWorkflowRuns(workflowId: string) {
 export function useComplaintWorkflowRuns(complaintId: string) {
   return useQuery({
     queryKey: ['workflow-runs', 'complaint', complaintId],
-    queryFn: () => api.get<ApiWorkflowRun[]>(`/admin/workflows/complaints/${complaintId}/runs`).then(r => r.data),
+    queryFn: () => api.get<ApiWorkflowRun[]>(`/complaints/${complaintId}/workflow-runs`).then(r => r.data),
     enabled: !!complaintId,
   });
 }

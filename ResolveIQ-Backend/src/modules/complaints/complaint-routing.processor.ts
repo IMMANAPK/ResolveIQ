@@ -94,18 +94,32 @@ export class ComplaintRoutingProcessor {
     complaint.committeeId = committeeId; // update in memory for fast passing
 
     // Step 4: Resolve notification recipients and send
-    if (committeeId && !complaint.notificationSentAt) {
-      const recipientIds = await this.rulesService.resolveRecipients(committeeId, {
-        priority: complaint.priority,
-        category: complaint.category,
-      });
+    if (!complaint.notificationSentAt) {
+      let notified = false;
 
-      if (recipientIds.length > 0) {
-        await this.notifier.sendToRecipientIds({
-          complaint,
-          recipientUserIds: recipientIds,
-          includeAiSummary: complaint.aiSummaryStatus === 'completed',
+      if (committeeId) {
+        const recipientIds = await this.rulesService.resolveRecipients(committeeId, {
+          priority: complaint.priority,
+          category: complaint.category,
         });
+
+        if (recipientIds.length > 0) {
+          await this.notifier.sendToRecipientIds({
+            complaint,
+            recipientUserIds: recipientIds,
+            includeAiSummary: complaint.aiSummaryStatus === 'completed',
+          });
+          notified = true;
+        }
+      }
+
+      if (!notified) {
+        // Fallback: no notification rules configured for this committee.
+        // Notify the committee manager (or all managers if no committee manager assigned).
+        this.logger.warn(
+          `No notification rules for committee ${committeeId ?? 'NONE'} — falling back to manager notification`,
+        );
+        await this.notifier.notifyManagers(complaint);
       }
 
       await this.complaintRepo.update(complaintId, { notificationSentAt: new Date() });

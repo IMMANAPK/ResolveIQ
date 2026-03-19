@@ -40,6 +40,10 @@ export function useComplaint(id: string) {
       return data;
     },
     enabled: !!id,
+    // Poll every 3 s while AI summary is generating so the UI recovers
+    // even if the WebSocket event is missed (race condition or Redis down).
+    refetchInterval: (query) =>
+      query.state.data?.aiSummaryStatus === 'pending' ? 3000 : false,
   });
 }
 

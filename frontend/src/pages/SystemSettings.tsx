@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,9 +15,16 @@ export default function SystemSettings() {
 
   const [form, setForm] = useState<Record<string, any>>({});
   const [testEmailAddr, setTestEmailAddr] = useState<string>("");
+  // Only populate the form from the server on the very first load.
+  // If we re-ran on every refetch (e.g. after saving AI config), it would
+  // overwrite unsaved SMTP fields the user has already typed — and vice versa.
+  const formInitialized = useRef(false);
 
   useEffect(() => {
-    if (settings) setForm(settings);
+    if (settings && !formInitialized.current) {
+      setForm(settings);
+      formInitialized.current = true;
+    }
   }, [settings]);
 
   if (isLoading) return <div className="flex p-20 justify-center"><Loader2 className="animate-spin w-8 h-8" /></div>;
