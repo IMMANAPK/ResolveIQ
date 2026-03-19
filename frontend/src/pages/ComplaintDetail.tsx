@@ -55,8 +55,16 @@ function buildTimeline(notifications: ApiNotification[], escalations: ApiEscalat
       }
     }
   }
+  const ESC_STEP_LABELS: Record<string, string> = {
+    reminder: "AI Reminder Sent",
+    reroute: "Complaint Re-routed",
+    multi_channel: "Critical Multi-Channel Alert",
+  };
   for (const esc of escalations) {
-    events.push({ id: "esc-" + esc.id, type: "escalation", description: "Escalation - step: " + esc.step, timestamp: esc.createdAt });
+    const label = ESC_STEP_LABELS[esc.step] ?? `Escalation: ${esc.step}`;
+    const aiNote = esc.aiGeneratedSubject ? ` — "${esc.aiGeneratedSubject}"` : esc.metadata?.aiReason ? ` — ${esc.metadata.aiReason}` : '';
+    const statusNote = esc.status === 'failed' ? ' (failed)' : '';
+    events.push({ id: "esc-" + esc.id, type: "escalation", description: label + aiNote + statusNote, timestamp: esc.createdAt });
   }
   return events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
@@ -70,8 +78,15 @@ function buildAiActions(notifications: ApiNotification[], escalations: ApiEscala
       actions.push({ id: "ai-reroute-" + notif.id, type: "reassignment", message: "Notification rerouted to available members", timestamp: notif.createdAt });
     }
   }
+  const ESC_ACTION_LABELS: Record<string, string> = {
+    reminder: "AI sent a smart reminder email",
+    reroute: "AI re-routed complaint to available members",
+    multi_channel: "AI triggered critical multi-channel alert",
+  };
   for (const esc of escalations) {
-    actions.push({ id: "ai-esc-" + esc.id, type: "escalation", message: "Escalation: " + esc.step + " (" + esc.status + ")", timestamp: esc.createdAt });
+    const message = ESC_ACTION_LABELS[esc.step] ?? `Escalation: ${esc.step}`;
+    const detail = esc.metadata?.aiReason ? ` (${esc.metadata.aiReason})` : '';
+    actions.push({ id: "ai-esc-" + esc.id, type: "escalation", message: message + detail, timestamp: esc.createdAt });
   }
   return actions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }

@@ -8,6 +8,8 @@ import { UserRole } from './modules/users/entities/user.entity';
 import { CommitteesService } from './modules/committees/committees.service';
 import { ComplaintCategory } from './modules/complaints/entities/complaint.entity';
 import { WorkflowsService } from './modules/workflows/workflows.service';
+import { NotificationRulesService } from './modules/notifications/notification-rules.service';
+import { NotificationRuleType } from './modules/notifications/entities/notification-rule.entity';
 
 const ADMIN_PASS = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123';
 const DEFAULT_PASS = process.env.SEED_DEFAULT_PASSWORD ?? 'Welcome@123';
@@ -242,6 +244,7 @@ async function bootstrap() {
   const usersService = app.get(UsersService);
   const committeesService = app.get(CommitteesService);
   const workflowsService = app.get(WorkflowsService);
+  const notificationRulesService = app.get(NotificationRulesService);
 
   // ── Seed Users ────────────────────────────────────────────────────────────
   console.log('\n🌱 Seeding users...\n');
@@ -302,6 +305,32 @@ async function bootstrap() {
       console.log(`  ✅ Created: ${c.name} [${c.categories.join(', ') || 'no category mapping'}]`);
     } catch (e: any) {
       console.error(`  ❌ Failed:  ${c.name} — ${e.message}`);
+    }
+  }
+
+  // ── Seed Notification Rules ───────────────────────────────────────────────
+  // Each committee gets one default rule that notifies all committee_member role users.
+  // Without at least one rule, the routing processor falls back to manager-only notification.
+  console.log('\n🔔 Seeding notification rules...\n');
+
+  const allCommittees = await committeesService.findAll();
+  for (const committee of allCommittees) {
+    try {
+      const existingRules = await notificationRulesService.findByCommittee(committee.id);
+      if (existingRules.length > 0) {
+        console.log(`  ⚠️  Skipped: ${committee.name} rules (already exist)`);
+        continue;
+      }
+      await notificationRulesService.create({
+        committeeId: committee.id,
+        type: NotificationRuleType.DEFAULT,
+        recipientUserIds: [],
+        recipientRoles: [UserRole.COMMITTEE_MEMBER],
+        order: 0,
+      });
+      console.log(`  ✅ Created default rule for: ${committee.name}`);
+    } catch (e: any) {
+      console.error(`  ❌ Failed rule for ${committee.name}: ${e.message}`);
     }
   }
 

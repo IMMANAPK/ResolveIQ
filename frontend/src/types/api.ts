@@ -68,14 +68,20 @@ export interface ApiNotification {
 }
 
 export type ApiEscalationStep = 'reminder' | 'reroute' | 'multi_channel';
-export type ApiEscalationStatus = 'pending' | 'sent' | 'failed';
+/** Matches EscalationStatus enum on the backend entity */
+export type ApiEscalationStatus = 'triggered' | 'completed' | 'failed';
 
 export interface ApiEscalationLog {
   id: string;
-  notificationId: string;
+  complaintId: string;
+  /** FK to the original notification that triggered this escalation */
+  originalNotificationId: string;
+  targetUserId: string;
   step: ApiEscalationStep;
   status: ApiEscalationStatus;
   metadata?: Record<string, unknown>;
+  aiGeneratedSubject?: string;
+  aiGeneratedBody?: string;
   createdAt: string;
   updatedAt: string;
 }
