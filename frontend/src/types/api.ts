@@ -242,3 +242,23 @@ export const CATEGORY_LABELS: Record<ApiComplaintCategory, string> = {
   safety: 'Safety',
   other: 'Other',
 };
+
+export interface ApiComment {
+  id: string;
+  complaintId: string;
+  authorId: string | null;
+  author: { id: string; fullName: string; email: string } | null;
+  body: string;
+  isInternal: boolean;
+  authorRole: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface ApiCommentPage {
+  data: ApiComment[];
+  total: number;
+  page: number;
+  limit: number;
+}
