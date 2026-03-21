@@ -62,4 +62,13 @@ export class UsersService {
   async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
     await this.repo.update(userId, { fcmToken });
   }
+
+  async updateCommittee(userId: string, committeeId: string | null): Promise<void> {
+    await this.repo.update(userId, { committeeId: committeeId ?? undefined });
+  }
+
+  async getMembersByCommitteeId(committeeId: string): Promise<User[]> {
+    const all = await this.repo.find({ where: { committeeId, isActive: true } });
+    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
+  }
 }
