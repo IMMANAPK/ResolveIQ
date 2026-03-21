@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateComplaint } from "@/hooks/useComplaints";
+import { FileDropzone } from "@/components/cms/FileDropzone";
+import { useUploadAttachment } from "@/hooks/useAttachments";
 import type { ApiComplaintCategory, ApiComplaintPriority } from "@/types/api";
 
 const schema = z.object({
@@ -40,6 +42,9 @@ interface Props {
 
 export function FileComplaintDialog({ open, onOpenChange }: Props) {
   const createComplaint = useCreateComplaint();
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [newComplaintId, setNewComplaintId] = useState<string | null>(null);
+  const uploadAttachment = useUploadAttachment(newComplaintId ?? '');
 
   const {
     register,
@@ -54,7 +59,15 @@ export function FileComplaintDialog({ open, onOpenChange }: Props) {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await createComplaint.mutateAsync(data);
+      const complaint = await createComplaint.mutateAsync(data);
+      setNewComplaintId(complaint.id);
+      for (const file of attachmentFiles) {
+        await uploadAttachment.mutateAsync(file).catch((e) => {
+          console.error(`Failed to upload ${file.name}`, e);
+        });
+      }
+      setAttachmentFiles([]);
+      setNewComplaintId(null);
       toast.success("Complaint filed successfully");
       reset();
       onOpenChange(false);
@@ -140,6 +153,11 @@ export function FileComplaintDialog({ open, onOpenChange }: Props) {
                 <p className="text-xs text-destructive">{errors.priority.message}</p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Attachments (optional, max 3)</label>
+            <FileDropzone files={attachmentFiles} onChange={setAttachmentFiles} />
           </div>
 
           <DialogFooter className="pt-2">

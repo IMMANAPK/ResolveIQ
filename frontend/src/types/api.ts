@@ -113,6 +113,18 @@ export interface ApiFeedback {
   createdAt: string;
 }
 
+export interface ApiAttachment {
+  id: string;
+  complaintId: string;
+  uploadedById: string;
+  url: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiNotificationRule {
   id: string;
   committeeId: string;

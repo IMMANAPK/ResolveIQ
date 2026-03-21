@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeedback, useSubmitFeedback } from "@/hooks/useFeedback";
+import { useAttachments, useUploadAttachment, useDeleteAttachment } from "@/hooks/useAttachments";
+import { AttachmentGrid } from "@/components/cms/AttachmentGrid";
+import { FileDropzone } from "@/components/cms/FileDropzone";
 import { StarRating } from "@/components/cms/StarRating";
 import { StatusBadge } from "@/components/cms/StatusBadge";
 import { SentimentBadge } from "@/components/cms/SentimentBadge";
@@ -111,6 +114,13 @@ export default function ComplaintDetail() {
   const submitFeedback = useSubmitFeedback(id!);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
+
+  const { data: attachments = [] } = useAttachments(id!);
+  const uploadAttachment = useUploadAttachment(id!);
+  const deleteAttachment = useDeleteAttachment(id!);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const isAdmin = user?.roles?.includes('admin');
+  const canUpload = attachments.length < 3;
 
   const isLoading = loadingComplaint || loadingNotifs || loadingEsc || loadingFeedback;
 
@@ -340,6 +350,53 @@ export default function ComplaintDetail() {
               )}
             </motion.div>
           ) : null}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="card-surface p-5"
+          >
+            <h2 className="mb-4 text-sm font-semibold text-foreground">
+              Attachments ({attachments.length}/3)
+            </h2>
+            <AttachmentGrid
+              attachments={attachments}
+              currentUserId={user?.id}
+              isAdmin={isAdmin}
+              onDelete={(attachmentId) =>
+                deleteAttachment.mutate(attachmentId, {
+                  onError: () => toast.error("Failed to delete attachment"),
+                })
+              }
+              deleting={deleteAttachment.isPending}
+            />
+            {canUpload && (
+              <div className="mt-3 space-y-2">
+                <FileDropzone
+                  files={pendingFiles}
+                  onChange={setPendingFiles}
+                  maxFiles={3 - attachments.length}
+                />
+                {pendingFiles.length > 0 && (
+                  <button
+                    className="w-full rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"
+                    disabled={uploadAttachment.isPending}
+                    onClick={async () => {
+                      for (const file of pendingFiles) {
+                        await uploadAttachment.mutateAsync(file).catch(() => {
+                          toast.error(`Failed to upload ${file.name}`);
+                        });
+                      }
+                      setPendingFiles([]);
+                      toast.success("Files uploaded");
+                    }}
+                  >
+                    {uploadAttachment.isPending ? "Uploading..." : `Upload ${pendingFiles.length} file(s)`}
+                  </button>
+                )}
+              </div>
+            )}
+          </motion.div>
         </div>
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">
