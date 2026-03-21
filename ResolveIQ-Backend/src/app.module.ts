@@ -17,6 +17,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { CommitteesModule } from './modules/committees/committees.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
+import { CommentsModule } from './modules/comments/comments.module';
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
 
@@ -40,6 +41,7 @@ import { redisConfig } from './config/redis.config';
     SettingsModule,
     FeedbackModule,
     AttachmentsModule,
+    CommentsModule,
   ],
 })
 export class AppModule {}
