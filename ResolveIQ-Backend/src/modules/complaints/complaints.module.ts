@@ -6,6 +6,7 @@ import { ComplaintsController } from './complaints.controller';
 import { ComplaintNotifierService } from './complaint-notifier.service';
 import { ComplaintRoutingProcessor } from './complaint-routing.processor';
 import { Complaint } from './entities/complaint.entity';
+import { SlaService } from './sla.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
@@ -25,7 +26,7 @@ import { WorkflowsModule } from '../workflows/workflows.module';
     CommitteesModule,
     forwardRef(() => WorkflowsModule),
   ],
-  providers: [ComplaintsService, ComplaintNotifierService, ComplaintRoutingProcessor],
+  providers: [ComplaintsService, ComplaintNotifierService, ComplaintRoutingProcessor, SlaService],
   controllers: [ComplaintsController],
   exports: [ComplaintsService],
 })

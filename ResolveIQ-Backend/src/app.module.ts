@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { ComplaintsModule } from './modules/complaints/complaints.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { EmailModule } from './modules/email/email.module';
@@ -36,6 +37,7 @@ import { redisConfig } from './config/redis.config';
     EventEmitterModule.forRoot(),
     WorkflowsModule,
     SettingsModule,
+    FeedbackModule,
   ],
 })
 export class AppModule {}

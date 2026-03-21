@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { CommitteesService } from '../committees/committees.service';
 import { SettingsService } from '../settings/settings.service';
+import { SentimentLabel } from '../complaints/entities/complaint.entity';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
 export type EscalationDecisionStep = 'reminder' | 'reroute' | 'multi_channel' | 'skip';
@@ -247,6 +248,90 @@ Respond in JSON format ONLY (no explanation outside JSON):
     } catch (err) {
       this.logger.error('AI escalation decision failed, using fallback logic', err);
       return this.fallbackEscalationDecision(priority, ageMinutes, reminderCount);
+    }
+  }
+
+  async analyzeSentiment(complaint: { title: string; description: string }): Promise<{
+    label: SentimentLabel;
+    score: number;
+    confidence: number;
+  }> {
+    const prompt = `You are a sentiment analysis assistant for a complaint management system.
+
+Analyze the emotional tone of this complaint and classify it.
+
+Complaint Title: ${complaint.title}
+Complaint Description: ${complaint.description}
+
+Classify into exactly ONE of these labels:
+- "frustrated": The person is annoyed or exasperated
+- "angry": The person is upset or hostile
+- "neutral": The person is stating facts without strong emotion
+- "concerned": The person is worried but reasonable
+- "satisfied": The person is generally positive (rare in complaints)
+
+Also provide:
+- "score": A number from 0.0 (very negative) to 1.0 (very positive)
+- "confidence": A number from 0.0 to 1.0 indicating how confident you are
+
+Respond in JSON format ONLY:
+{"label": "one_of_the_labels", "score": 0.0-1.0, "confidence": 0.0-1.0}`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.1,
+      });
+
+      const text = response.choices[0]?.message?.content?.trim() ?? '';
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      const validLabels: SentimentLabel[] = ['frustrated', 'angry', 'neutral', 'concerned', 'satisfied'];
+      const label: SentimentLabel = validLabels.includes(parsed.label) ? parsed.label : 'neutral';
+      const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(1, parsed.score)) : 0.5;
+      const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5;
+
+      return { label, score, confidence };
+    } catch (err) {
+      this.logger.error('AI sentiment analysis failed, using fallback', err);
+      return { label: 'neutral', score: 0.5, confidence: 0 };
+    }
+  }
+
+  async summarizeFeedback(context: {
+    complaintTitle: string;
+    rating: number;
+    comment: string;
+  }): Promise<string> {
+    const prompt = `You are a feedback summarizer for a complaint management system.
+
+A complainant has provided feedback on the resolution of their complaint.
+
+Complaint Title: ${context.complaintTitle}
+Rating: ${context.rating}/5 stars
+Comment: ${context.comment}
+
+Write a ONE sentence summary that captures the key sentiment and any actionable insight from this feedback. Be concise and professional.
+
+Respond with ONLY the summary sentence, no labels or formatting.`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.3,
+      });
+
+      const summary = response.choices[0]?.message?.content?.trim();
+      if (!summary) throw new Error('Empty response');
+      return summary;
+    } catch (err) {
+      this.logger.error('AI feedback summary failed', err);
+      throw err; // caller handles fallback (leaves aiSummary null)
     }
   }
 

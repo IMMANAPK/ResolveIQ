@@ -18,6 +18,7 @@ export interface ApiUser {
 export type ApiComplaintStatus = 'open' | 'assigned' | 'in_progress' | 'resolved' | 'closed';
 export type ApiComplaintPriority = 'low' | 'medium' | 'high' | 'critical';
 export type ApiComplaintCategory = 'hr' | 'it' | 'facilities' | 'conduct' | 'safety' | 'other';
+export type ApiSentimentLabel = 'frustrated' | 'angry' | 'neutral' | 'concerned' | 'satisfied';
 
 export interface ApiComplaint {
   id: string;
@@ -33,6 +34,11 @@ export interface ApiComplaint {
   aiSummary?: string;
   aiSummaryStatus?: 'pending' | 'completed' | 'failed';
   aiSummaryError?: string;
+  sentimentLabel?: ApiSentimentLabel;
+  sentimentScore?: number;
+  slaDeadline?: string;
+  slaBreached?: boolean;
+  slaBreachedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -95,6 +101,16 @@ export interface ApiCommittee {
   manager?: ApiUser;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApiFeedback {
+  id: string;
+  complaintId: string;
+  userId: string;
+  rating: number;
+  comment?: string;
+  aiSummary?: string;
+  createdAt: string;
 }
 
 export interface ApiNotificationRule {
@@ -166,6 +182,28 @@ export interface ApiWorkflowStepLog {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+}
+
+export interface ApiComplaintStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+  byCategory: Record<string, number>;
+  bySentiment: Record<string, number>;
+  overTime: Array<{
+    date: string;
+    created: number;
+    resolved: number;
+  }>;
+  avgResolutionHours: number | null;
+  slaBreachCount: number;
+  slaBreachRate: number;
+  avgFeedbackRating: number | null;
+  committeeWorkload: Array<{
+    committeeName: string;
+    count: number;
+    avgRating: number | null;
+  }>;
 }
 
 // Display mappers

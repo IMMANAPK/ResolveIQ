@@ -1,9 +1,15 @@
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Loader2, Brain, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { useFeedback, useSubmitFeedback } from "@/hooks/useFeedback";
+import { StarRating } from "@/components/cms/StarRating";
 import { StatusBadge } from "@/components/cms/StatusBadge";
+import { SentimentBadge } from "@/components/cms/SentimentBadge";
+import { SlaBadge } from "@/components/cms/SlaBadge";
 import { StatusStepper } from "@/components/cms/StatusStepper";
 import { RecipientTracker } from "@/components/cms/RecipientTracker";
 import { AIActionPanel } from "@/components/cms/AIActionPanel";
@@ -99,7 +105,14 @@ export default function ComplaintDetail() {
   const { data: escalations = [], isLoading: loadingEsc } = useEscalationHistory(id!);
   const triggerEscalation = useTriggerEscalation();
   const regenerate = useRegenerateSummary();
-  const isLoading = loadingComplaint || loadingNotifs || loadingEsc;
+
+  const { user } = useAuth();
+  const { data: feedback, isLoading: loadingFeedback } = useFeedback(id!);
+  const submitFeedback = useSubmitFeedback(id!);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+
+  const isLoading = loadingComplaint || loadingNotifs || loadingEsc || loadingFeedback;
 
   useEffect(() => {
     if (!complaint?.id) return;
@@ -188,6 +201,18 @@ export default function ComplaintDetail() {
             <span className="text-xs font-medium text-muted-foreground tabular-nums">{complaint.id.slice(0, 8)}</span>
             <StatusBadge priority={priorityLabel as never}>{priorityLabel}</StatusBadge>
             <StatusBadge status={statusLabel as never}>{statusLabel}</StatusBadge>
+            {complaint.sentimentLabel && (
+              <SentimentBadge label={complaint.sentimentLabel} score={complaint.sentimentScore} />
+            )}
+            {complaint.slaDeadline && (
+              <SlaBadge
+                slaDeadline={complaint.slaDeadline}
+                slaBreached={complaint.slaBreached}
+                slaBreachedAt={complaint.slaBreachedAt}
+                createdAt={complaint.createdAt}
+                status={complaint.status}
+              />
+            )}
           </div>
           <h1 className="mt-2 text-xl font-semibold text-foreground">{complaint.title}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -245,6 +270,76 @@ export default function ComplaintDetail() {
               <RunHistory complaintId={complaint.id} />
             </div>
           </motion.div>
+
+          {/* Feedback Section */}
+          {complaint.status === 'resolved' || complaint.status === 'closed' ? (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="card-surface p-5">
+              <h2 className="mb-4 text-sm font-semibold text-foreground">Resolution Feedback</h2>
+              {feedback ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <StarRating value={feedback.rating} readonly size="md" />
+                    <span className="text-sm text-muted-foreground">{feedback.rating}/5</span>
+                  </div>
+                  {feedback.comment && (
+                    <p className="text-sm text-muted-foreground">{feedback.comment}</p>
+                  )}
+                  {feedback.aiSummary && (
+                    <div className="rounded-lg border bg-blue-50/50 p-3">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700 mb-1">
+                        <Brain className="h-3.5 w-3.5" />
+                        AI Summary
+                      </div>
+                      <p className="text-xs text-gray-700">{feedback.aiSummary}</p>
+                    </div>
+                  )}
+                </div>
+              ) : complaint.raisedById === user?.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (feedbackRating === 0) return;
+                    submitFeedback.mutate(
+                      { rating: feedbackRating, comment: feedbackComment || undefined },
+                      {
+                        onSuccess: () => {
+                          toast.success("Feedback submitted!");
+                          setFeedbackRating(0);
+                          setFeedbackComment("");
+                        },
+                        onError: () => toast.error("Failed to submit feedback"),
+                      }
+                    );
+                  }}
+                  className="space-y-3"
+                >
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">How satisfied are you with the resolution?</label>
+                    <StarRating value={feedbackRating} onChange={setFeedbackRating} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Comments (optional)</label>
+                    <Textarea
+                      value={feedbackComment}
+                      onChange={(e) => setFeedbackComment(e.target.value)}
+                      placeholder="Share your experience..."
+                      rows={3}
+                      maxLength={2000}
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={feedbackRating === 0 || submitFeedback.isPending}
+                  >
+                    {submitFeedback.isPending ? "Submitting..." : "Submit Feedback"}
+                  </Button>
+                </form>
+              ) : (
+                <p className="text-sm text-muted-foreground">No feedback yet.</p>
+              )}
+            </motion.div>
+          ) : null}
         </div>
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">

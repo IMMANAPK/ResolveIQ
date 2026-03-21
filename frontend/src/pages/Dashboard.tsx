@@ -1,17 +1,36 @@
 import { motion } from "framer-motion";
-import { FileText, Clock, Eye, AlertTriangle, ArrowUpRight, Loader2 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { FileText, Clock, AlertTriangle, Loader2, TrendingUp, CheckCircle, Star } from "lucide-react";
 import { StatCard } from "@/components/cms/StatCard";
-import { StatusBadge } from "@/components/cms/StatusBadge";
-import { useComplaints } from "@/hooks/useComplaints";
-import { useNotifications } from "@/hooks/useNotifications";
-import { STATUS_LABELS, PRIORITY_LABELS, type ApiComplaintStatus } from "@/types/api";
+import { useComplaintStats } from "@/hooks/useComplaintStats";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+  AreaChart,
+  Area
+} from "recharts";
+
+const SENTIMENT_COLORS: Record<string, string> = {
+  frustrated: "#ef4444",
+  angry: "#dc2626",
+  neutral: "#94a3b8",
+  concerned: "#f59e0b",
+  satisfied: "#22c55e",
+  unknown: "#cbd5e1",
+};
 
 export default function Dashboard() {
-  const { data: complaints = [], isLoading: loadingComplaints } = useComplaints();
-  const { data: notifications = [], isLoading: loadingNotifications } = useNotifications();
+  const { data: stats, isLoading: loadingStats } = useComplaintStats(30);
 
-  if (loadingComplaints || loadingNotifications) {
+  if (loadingStats) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -19,104 +38,124 @@ export default function Dashboard() {
     );
   }
 
-  const recentComplaints = complaints.slice(0, 5);
-
-  const dashboardStats = {
-    total: complaints.length,
-    pending: complaints.filter(c => c.status === "open" || c.status === "assigned").length,
-    viewed: notifications.filter(n => n.allRead).length, // simple approximation
-    escalations: notifications.filter(n => n.type === "escalation").length,
-  };
+  const sentimentData = stats ? Object.entries(stats.bySentiment).map(([name, value]) => ({ name, value })) : [];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 pb-10">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Overview of your complaint management system</p>
+        <h1 className="text-2xl font-semibold text-foreground">Analytics Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">30-day overview of complaint processing and SLA performance.</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Complaints" value={dashboardStats.total} icon={FileText} color="primary" delay={0} />
-        <StatCard title="Pending" value={dashboardStats.pending} icon={Clock} color="high" delay={0.08} trend="Needs attention" />
-        <StatCard title="Viewed Notifications" value={dashboardStats.viewed} icon={Eye} color="success" delay={0.16} />
-        <StatCard title="Escalations" value={dashboardStats.escalations} icon={AlertTriangle} color="critical" delay={0.24} />
-      </div>
+      {stats && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard title="Total Volume" value={stats.total} icon={FileText} color="primary" delay={0} />
+          <StatCard 
+            title="Avg Resolution Info" 
+            value={stats.avgResolutionHours ? `${stats.avgResolutionHours.toFixed(1)}h` : "N/A"} 
+            icon={Clock} 
+            color="success" 
+            delay={0.1} 
+          />
+          <StatCard 
+            title="SLA Breach Rate" 
+            value={`${(stats.slaBreachRate * 100).toFixed(1)}%`} 
+            icon={AlertTriangle} 
+            color={stats.slaBreachRate > 0.1 ? "critical" : "high"} 
+            delay={0.2} 
+            trend={`${stats.slaBreachCount} breached`}
+          />
+          <StatCard 
+            title="Avg Feedback Rating" 
+            value={stats.avgFeedbackRating ? `${stats.avgFeedbackRating}/5` : "N/A"} 
+            icon={Star} 
+            color="primary" 
+            delay={0.3} 
+          />
+        </div>
+      )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Complaints */}
-        <div className="lg:col-span-2 card-surface">
-          <div className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h2 className="text-sm font-semibold text-foreground">Recent Complaints</h2>
-            <Link to="/complaints" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-              View all <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <div className="divide-y divide-border">
-            {recentComplaints.map((c, i) => {
-              const notifsForC = notifications.filter(n => n.complaintId === c.id);
-              const recipients = notifsForC.flatMap(n => n.recipients);
-              const seen = recipients.filter(r => r.isRead).length;
+      {stats && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Issue Volume Over Time */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="card-surface p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" /> Issue Volume Trend
+            </h2>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.overTime}>
+                  <defs>
+                    <linearGradient id="colorCreated" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" tick={{fontSize: 12}} tickMargin={10} minTickGap={30} />
+                  <YAxis tick={{fontSize: 12}} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <Tooltip wrapperClassName="text-sm rounded-md shadow-sm border border-border" />
+                  <Legend wrapperStyle={{fontSize: '12px'}} />
+                  <Area type="monotone" dataKey="created" name="New" stroke="#3b82f6" fillOpacity={1} fill="url(#colorCreated)" />
+                  <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#10b981" fillOpacity={1} fill="url(#colorResolved)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
 
-              const priorityLabel = PRIORITY_LABELS[c.priority];
-              const statusLabel = STATUS_LABELS[c.status];
-
-              return (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.05 }}
-                >
-                  <Link
-                    to={`/complaints/${c.id}`}
-                    className="flex items-center gap-4 px-5 py-3.5 transition-colors duration-150 hover:bg-muted/50"
+          {/* Sentiment Distribution */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5 tracking-tight">
+            <h2 className="mb-4 text-sm font-semibold text-foreground flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" /> AI Sentiment Analysis
+            </h2>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={sentimentData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground tabular-nums">{c.id.slice(0, 8)}</span>
-                        <StatusBadge priority={priorityLabel as ("Low" | "Medium" | "High" | "Critical")}>{priorityLabel}</StatusBadge>
-                        <StatusBadge status={statusLabel as ("New" | "In Review" | "In Progress" | "Escalated" | "Resolved")}>{statusLabel}</StatusBadge>
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground">{c.title}</p>
-                    </div>
-                    <div className="hidden shrink-0 items-center gap-3 sm:flex">
-                      {recipients.length > 0 && (
-                        <span className="text-xs text-muted-foreground">{seen}/{recipients.length} seen</span>
-                      )}
-                    </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
+                    {sentimentData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={SENTIMENT_COLORS[entry.name] || SENTIMENT_COLORS.unknown} />
+                    ))}
+                  </Pie>
+                  <Tooltip wrapperClassName="text-sm rounded-md shadow-sm border border-border" />
+                  <Legend wrapperStyle={{fontSize: '12px'}} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
 
-        {/* AI Insights */}
-        <div className="card-surface">
-          <div className="border-b border-border px-5 py-4">
-            <h2 className="text-sm font-semibold text-foreground">Quick AI Insights</h2>
-          </div>
-          <div className="space-y-3 p-5">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="rounded-lg border border-status-ai/20 bg-status-ai/5 p-3">
-              <p className="text-xs font-medium text-status-ai">Auto-Escalation Triggered</p>
-              <p className="mt-1 text-xs text-muted-foreground">CMP-101 has 2 unresponsive members after 48h</p>
-            </motion.div>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="rounded-lg border border-status-high/20 bg-status-high/5 p-3">
-              <p className="text-xs font-medium text-status-high">Reminder Pending</p>
-              <p className="mt-1 text-xs text-muted-foreground">CMP-105 — Raj Patel hasn't responded to 2 reminders</p>
-            </motion.div>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="rounded-lg border border-status-success/20 bg-status-success/5 p-3">
-              <p className="text-xs font-medium text-status-success">Resolution Rate</p>
-              <p className="mt-1 text-xs text-muted-foreground">83% of complaints resolved within SLA this month</p>
-            </motion.div>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="rounded-lg border border-border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-foreground">Active AI Actions</p>
-              <p className="mt-1 text-xs text-muted-foreground">7 reminders sent, 2 escalations, 1 reassignment this week</p>
-            </motion.div>
-          </div>
+          {/* Committee Workload */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="card-surface p-5 lg:col-span-2">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">Committee Workload & Performance</h2>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.committeeWorkload} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="committeeName" tick={{fontSize: 12}} />
+                  <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" tick={{fontSize: 12}} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#f59e0b" tick={{fontSize: 12}} domain={[0, 5]} />
+                  <Tooltip wrapperClassName="text-sm rounded-md shadow-sm border border-border" />
+                  <Legend wrapperStyle={{fontSize: '12px'}} />
+                  <Bar yAxisId="left" dataKey="count" name="Total Complaints" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="avgRating" name="Avg Rating (1-5)" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }

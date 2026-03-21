@@ -46,6 +46,20 @@ export class ComplaintsController {
     return this.complaintsService.findByUser(user.id);
   }
 
+  @Get('stats')
+  getStats(
+    @CurrentUser() user: { id: string; roles?: string[] },
+    @Query('days') days?: string,
+  ) {
+    const roles: string[] = user.roles ?? [];
+    const isPrivileged = roles.some((r) => PRIVILEGED_ROLES.includes(r));
+    if (!isPrivileged) {
+      throw new ForbiddenException('Only privileged users can access stats');
+    }
+    const numDays = days ? parseInt(days, 10) : 30;
+    return this.complaintsService.getStats(numDays);
+  }
+
   /**
    * View a single complaint — complainants can only view their own.
    */

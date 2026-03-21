@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import type { Job, Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Complaint, AiSummaryStatus } from '../complaints/entities/complaint.entity';
+import { Complaint, AiSummaryStatus, SentimentLabel } from '../complaints/entities/complaint.entity';
 import { AiService } from './ai.service';
 import { EventsGateway } from '../gateway/events.gateway';
 
@@ -37,10 +37,27 @@ export class AiSummaryProcessor {
         priority: complaint.priority,
       });
 
+      // Sentiment analysis — fire after summary, never blocks the pipeline
+      let sentimentLabel: SentimentLabel | undefined;
+      let sentimentScore: number | undefined;
+      try {
+        const sentiment = await this.aiService.analyzeSentiment({
+          title: complaint.title,
+          description: complaint.description,
+        });
+        sentimentLabel = sentiment.label;
+        sentimentScore = sentiment.score;
+        this.logger.log(`Sentiment for ${complaintId}: ${sentiment.label} (${sentiment.score})`);
+      } catch (sentErr) {
+        this.logger.warn(`Sentiment analysis failed for ${complaintId}, skipping: ${sentErr}`);
+      }
+
       await this.complaintRepo.update(complaintId, {
         aiSummary: summary,
         aiSummaryStatus: AiSummaryStatus.COMPLETED,
         aiSummaryCompletedAt: new Date(),
+        ...(sentimentLabel && { sentimentLabel }),
+        ...(sentimentScore !== undefined && { sentimentScore }),
       });
 
       this.logger.log(`Summary generated for complaint ${complaintId}`);

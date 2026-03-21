@@ -39,6 +39,8 @@ export enum RoutingMethod {
   MANUAL = 'manual',
 }
 
+export type SentimentLabel = 'frustrated' | 'angry' | 'neutral' | 'concerned' | 'satisfied';
+
 @Entity('complaints')
 export class Complaint extends BaseEntity {
   @Column()
@@ -105,4 +107,19 @@ export class Complaint extends BaseEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   notificationSentAt?: Date;
+
+  @Column({ type: 'varchar', nullable: true })
+  sentimentLabel?: SentimentLabel;
+
+  @Column({ type: 'float', nullable: true })
+  sentimentScore?: number; // 0.0 (very negative) to 1.0 (very positive)
+
+  @Column({ type: 'timestamptz', nullable: true })
+  slaDeadline?: Date;
+
+  @Column({ default: false })
+  slaBreached: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  slaBreachedAt?: Date;
 }
