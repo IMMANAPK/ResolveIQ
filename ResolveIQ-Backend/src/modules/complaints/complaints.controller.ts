@@ -78,11 +78,19 @@ export class ComplaintsController {
   }
 
   @Patch(':id/status')
-  updateStatus(
+  async updateStatus(
     @Param('id') id: string,
-    @Body() body: { status: ComplaintStatus; resolutionNotes?: string },
+    @Body() body: { status: ComplaintStatus; resolutionNotes?: string; notifyComplainant?: boolean },
+    @CurrentUser() user: { id: string; roles?: string[]; fullName?: string; email?: string },
   ) {
-    return this.complaintsService.updateStatus(id, body.status, body.resolutionNotes);
+    const roles: string[] = user.roles ?? [];
+    const isPrivileged = roles.some(r => PRIVILEGED_ROLES.includes(r));
+    if (!isPrivileged) {
+      throw new ForbiddenException('Only privileged users can update complaint status');
+    }
+    const autoNotify = body.status === ComplaintStatus.RESOLVED || body.status === ComplaintStatus.CLOSED;
+    const notify = body.notifyComplainant ?? autoNotify;
+    return this.complaintsService.updateStatus(id, body.status, body.resolutionNotes, notify, user);
   }
 
   @Get(':id/workflow-runs')

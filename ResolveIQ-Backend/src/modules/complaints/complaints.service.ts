@@ -60,13 +60,28 @@ export class ComplaintsService {
     });
   }
 
-  async updateStatus(id: string, status: ComplaintStatus, resolutionNotes?: string): Promise<Complaint> {
+  async updateStatus(
+    id: string,
+    status: ComplaintStatus,
+    resolutionNotes?: string,
+    notifyComplainant = false,
+    updatedByUser?: { id: string; fullName?: string; email?: string },
+  ): Promise<Complaint> {
     const complaint = await this.findOrFail(id);
     complaint.status = status;
     if (resolutionNotes) complaint.resolutionNotes = resolutionNotes;
-    if (status === ComplaintStatus.RESOLVED) complaint.resolvedAt = new Date();
+    // Fix: set resolvedAt for both resolved AND closed
+    if (status === ComplaintStatus.RESOLVED || status === ComplaintStatus.CLOSED) {
+      complaint.resolvedAt = new Date();
+    }
     const saved = await this.repo.save(complaint);
     this.eventEmitter.emit('complaint.status_changed', { complaintId: id, newStatus: status });
+
+    if (notifyComplainant) {
+      this.notifier.sendStatusChangeEmail(saved, updatedByUser)
+        .catch(e => this.logger.error('sendStatusChangeEmail failed', e));
+    }
+
     return saved;
   }
 

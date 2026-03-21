@@ -126,6 +126,28 @@ export class ComplaintNotifierService {
     }
   }
 
+  async sendStatusChangeEmail(
+    complaint: Complaint,
+    updatedBy?: { id?: string; fullName?: string; email?: string },
+  ): Promise<void> {
+    if (!complaint.raisedBy?.email) {
+      this.logger.warn(`No email for complainant on complaint ${complaint.id}`);
+      return;
+    }
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const statusLabel = complaint.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const by = esc(updatedBy?.fullName ?? 'The team');
+    await this.emailService.sendEmail({
+      to: complaint.raisedBy.email,
+      subject: `Your complaint status has been updated: ${statusLabel}`,
+      html: `<p>Hi ${esc(complaint.raisedBy.fullName ?? '')},</p>
+             <p>Your complaint <strong>${esc(complaint.title)}</strong> has been updated to <strong>${statusLabel}</strong> by ${by}.</p>
+             ${complaint.resolutionNotes ? `<p><strong>Resolution notes:</strong><br>${esc(complaint.resolutionNotes)}</p>` : ''}
+             <p>Log in to view the full details.</p>`,
+    });
+  }
+
   private async buildAttachmentsHtml(complaintId: string): Promise<string> {
     const attachments = await this.attachmentsService.findByComplaint(complaintId);
     if (!attachments.length) return '';
