@@ -13,6 +13,7 @@ import { UsersModule } from '../users/users.module';
 import { AiModule } from '../ai/ai.module';
 import { CommitteesModule } from '../committees/committees.module';
 import { WorkflowsModule } from '../workflows/workflows.module';
+import { AttachmentsModule } from '../attachments/attachments.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { WorkflowsModule } from '../workflows/workflows.module';
     AiModule,
     CommitteesModule,
     forwardRef(() => WorkflowsModule),
+    AttachmentsModule,
   ],
   providers: [ComplaintsService, ComplaintNotifierService, ComplaintRoutingProcessor, SlaService],
   controllers: [ComplaintsController],

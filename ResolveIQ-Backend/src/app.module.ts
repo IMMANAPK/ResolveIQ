@@ -16,6 +16,7 @@ import { EscalationModule } from './modules/escalation/escalation.module';
 import { AiModule } from './modules/ai/ai.module';
 import { GatewayModule } from './modules/gateway/gateway.module';
 import { CommitteesModule } from './modules/committees/committees.module';
+import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
 
@@ -38,6 +39,7 @@ import { redisConfig } from './config/redis.config';
     WorkflowsModule,
     SettingsModule,
     FeedbackModule,
+    AttachmentsModule,
   ],
 })
 export class AppModule {}
