@@ -9,6 +9,7 @@ import { Complaint, ComplaintStatus } from './entities/complaint.entity';
 import { NotificationType, NotificationChannel } from '../notifications/entities/notification.entity';
 import { User } from '../users/entities/user.entity';
 import { AiService } from '../ai/ai.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 
 @Injectable()
 export class ComplaintNotifierService {
@@ -21,6 +22,7 @@ export class ComplaintNotifierService {
     private aiService: AiService,
     private committeesService: CommitteesService,
     @InjectRepository(Complaint) private complaintRepo: Repository<Complaint>,
+    private readonly attachmentsService: AttachmentsService,
   ) {}
 
   async notifyCommittee(complaint: Complaint): Promise<void> {
@@ -109,7 +111,10 @@ export class ComplaintNotifierService {
         priority: complaint.priority,
       });
 
-      const result = await this.emailService.sendEmail({ to: member.email, subject, html });
+      const attachmentsHtml = await this.buildAttachmentsHtml(opts.complaint.id);
+      const fullHtml = html + attachmentsHtml;
+
+      const result = await this.emailService.sendEmail({ to: member.email, subject, html: fullHtml });
 
       if (result.success) {
         await this.notificationsService.markRecipientSent(trackingId, result.messageId);
@@ -119,5 +124,22 @@ export class ComplaintNotifierService {
         this.logger.warn(`Failed to send to ${member.email}`);
       }
     }
+  }
+
+  private async buildAttachmentsHtml(complaintId: string): Promise<string> {
+    const attachments = await this.attachmentsService.findByComplaint(complaintId);
+    if (!attachments.length) return '';
+
+    const esc = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const parts = attachments.map((a) => {
+      if (a.mimetype.startsWith('image/')) {
+        return `<div style="margin:4px 0"><img src="${a.url}" alt="${esc(a.filename)}" style="max-width:400px;border-radius:4px" /></div>`;
+      }
+      return `<div style="margin:4px 0">\uD83D\uDCCE <a href="${a.url}">${esc(a.filename)}</a></div>`;
+    });
+
+    return `<div style="margin-top:12px"><strong>Attachments:</strong>${parts.join('')}</div>`;
   }
 }
