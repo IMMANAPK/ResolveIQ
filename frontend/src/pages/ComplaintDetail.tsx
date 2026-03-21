@@ -27,6 +27,8 @@ import { useEscalationHistory, useTriggerEscalation } from "@/hooks/useEscalatio
 import { PRIORITY_LABELS, STATUS_LABELS, CATEGORY_LABELS } from "@/types/api";
 import type { ApiNotification, ApiEscalationLog } from "@/types/api";
 import { toast } from "sonner";
+import { CommentThread } from '@/components/cms/CommentThread';
+import { StatusUpdatePanel } from '@/components/cms/StatusUpdatePanel';
 
 function buildRecipients(notifications: ApiNotification[]): Recipient[] {
   const seen = new Map<string, Recipient>();
@@ -271,6 +273,13 @@ export default function ComplaintDetail() {
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{complaint.description}</p>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">Discussion</h2>
+            <CommentThread
+              complaintId={complaint.id}
+              isClosed={complaint.status === 'closed'}
+            />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h2>
             <ActivityTimeline events={timeline} />
           </motion.div>
@@ -403,6 +412,14 @@ export default function ComplaintDetail() {
             <h2 className="mb-4 text-sm font-semibold text-foreground">Recipient Tracking</h2>
             <RecipientTracker recipients={recipients} />
           </motion.div>
+          {(isAdmin || user?.roles?.some(r => ['manager', 'committee_member'].includes(r))) && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <StatusUpdatePanel
+                complaintId={complaint.id}
+                currentStatus={complaint.status}
+              />
+            </motion.div>
+          )}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <AIActionPanel
               actions={aiActions}
