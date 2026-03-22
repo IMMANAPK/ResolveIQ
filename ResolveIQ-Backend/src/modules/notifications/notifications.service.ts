@@ -156,6 +156,7 @@ export class NotificationsService {
       .leftJoinAndSelect('n.recipients', 'r')
       .leftJoinAndSelect('r.recipient', 'u')
       .leftJoinAndSelect('n.complaint', 'c')
+      .andWhere('c.status NOT IN (:...statuses)', { statuses: ['resolved', 'closed'] })
       .getMany();
   }
 

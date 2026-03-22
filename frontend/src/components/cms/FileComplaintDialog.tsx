@@ -21,9 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCreateComplaint } from "@/hooks/useComplaints";
 import { FileDropzone } from "@/components/cms/FileDropzone";
-import { useUploadAttachment } from "@/hooks/useAttachments";
+import api from "@/lib/api";
 import type { ApiComplaintCategory, ApiComplaintPriority } from "@/types/api";
 
 const schema = z.object({
@@ -43,8 +44,7 @@ interface Props {
 export function FileComplaintDialog({ open, onOpenChange }: Props) {
   const createComplaint = useCreateComplaint();
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
-  const [newComplaintId, setNewComplaintId] = useState<string | null>(null);
-  const uploadAttachment = useUploadAttachment(newComplaintId ?? '');
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -60,14 +60,17 @@ export function FileComplaintDialog({ open, onOpenChange }: Props) {
   const onSubmit = async (data: FormData) => {
     try {
       const complaint = await createComplaint.mutateAsync(data);
-      setNewComplaintId(complaint.id);
       for (const file of attachmentFiles) {
-        await uploadAttachment.mutateAsync(file).catch((e) => {
-          console.error(`Failed to upload ${file.name}`, e);
-        });
+        const form = new FormData();
+        form.append('file', file);
+        await api.post(`/complaints/${complaint.id}/attachments`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }).catch((e) => console.error(`Failed to upload ${file.name}`, e));
+      }
+      if (attachmentFiles.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['attachments', complaint.id] });
       }
       setAttachmentFiles([]);
-      setNewComplaintId(null);
       toast.success("Complaint filed successfully");
       reset();
       onOpenChange(false);

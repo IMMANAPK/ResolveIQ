@@ -86,59 +86,45 @@ export class EscalationService {
   }
 
   async rerouteToAvailableMembers(notification: Notification): Promise<void> {
-    const unreadRecipients = await this.notificationsService.getUnreadRecipients(notification.id);
-    const unreadIds = new Set(unreadRecipients.map((r) => r.recipientId));
-    const availableMembers = await this.usersService.getAvailableCommitteeMembers();
-    const rerouteTargets = availableMembers.filter((m) => !unreadIds.has(m.id));
+    // Instead of re-routing to another committee, notify managers that the committee hasn't responded
+    const managers = await this.usersService.getManagers();
 
-    if (rerouteTargets.length === 0) {
-      this.logger.warn(`No available alternates for complaint ${notification.complaintId}`);
+    if (managers.length === 0) {
+      this.logger.warn(`No managers found to escalate complaint ${notification.complaintId}`);
       return;
     }
 
-    const newNotification = await this.notificationsService.createNotification({
-      complaintId: notification.complaintId,
-      type: NotificationType.RE_ROUTED,
-      channel: NotificationChannel.EMAIL,
-      subject: `[RE-ROUTED] Action Required: ${notification.complaint?.title}`,
-      body: `This complaint has been re-routed to you as the original assignees have not responded.`,
-      recipientIds: rerouteTargets.map((m) => m.id),
-    });
+    const complaint = notification.complaint;
+    const subject = `[ACTION REQUIRED] Committee not responding: ${complaint?.title ?? 'Complaint'}`;
 
-    for (const nr of newNotification.recipients) {
-      const member = rerouteTargets.find((m) => m.id === nr.recipientId);
+    for (const manager of managers) {
+      if (!manager.email) continue;
+
       const html = this.emailService.buildNotificationHtml({
-        recipientName: member?.fullName ?? 'Team Member',
-        complaintTitle: notification.complaint?.title ?? 'Complaint',
+        recipientName: manager.fullName ?? 'Manager',
+        complaintTitle: complaint?.title ?? 'Complaint',
         complaintId: notification.complaintId,
-        trackingId: nr.trackingId,
-        message: `This complaint has been re-routed to you as previous assignees are unavailable.`,
-        priority: notification.complaint?.priority ?? 'medium',
+        trackingId: '',
+        message: `The assigned committee has not responded to this complaint. Please take action.`,
+        priority: complaint?.priority ?? 'medium',
       });
 
-      const result = await this.emailService.sendEmail({
-        to: member?.email ?? '',
-        subject: newNotification.subject,
-        html,
-      });
+      await this.emailService.sendEmail({ to: manager.email, subject, html });
 
-      if (result.success) {
-        await this.notificationsService.markRecipientSent(nr.trackingId);
-        await this.logEscalation({
-          complaintId: notification.complaintId,
-          originalNotificationId: notification.id,
-          targetUserId: nr.recipientId,
-          step: EscalationStep.REROUTE,
-          metadata: { reroutedFrom: [...unreadIds] },
-          status: EscalationStatus.COMPLETED,
-        });
-      }
+      await this.logEscalation({
+        complaintId: notification.complaintId,
+        originalNotificationId: notification.id,
+        targetUserId: manager.id,
+        step: EscalationStep.REROUTE,
+        metadata: { escalatedToManager: true },
+        status: EscalationStatus.COMPLETED,
+      });
     }
 
     this.eventsGateway.emitEscalationTriggered({
       complaintId: notification.complaintId,
       step: 'reroute',
-      message: `Complaint re-routed to ${rerouteTargets.length} available members`,
+      message: `Manager notified — committee did not respond`,
     });
   }
 
