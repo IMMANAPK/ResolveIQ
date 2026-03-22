@@ -133,6 +133,7 @@ export class NotificationsService {
     return this.notifRepo
       .createQueryBuilder('n')
       .leftJoinAndSelect('n.recipients', 'r')
+      .leftJoinAndSelect('r.recipient', 'u')
       .leftJoinAndSelect('n.complaint', 'c')
       .where('n.id IN (:...notifIds)', { notifIds })
       .orderBy('n.createdAt', 'DESC')
@@ -140,11 +141,13 @@ export class NotificationsService {
   }
 
   async getNotificationsForComplaint(complaintId: string): Promise<Notification[]> {
-    return this.notifRepo.find({
-      where: { complaintId },
-      relations: ['recipients', 'recipients.recipient'],
-      order: { createdAt: 'DESC' },
-    });
+    return this.notifRepo
+      .createQueryBuilder('n')
+      .leftJoinAndSelect('n.recipients', 'r')
+      .leftJoinAndSelect('r.recipient', 'u')
+      .where('n.complaintId = :complaintId', { complaintId })
+      .orderBy('n.createdAt', 'DESC')
+      .getMany();
   }
 
   async getUnacknowledgedNotifications(olderThanMinutes: number): Promise<Notification[]> {
@@ -158,6 +161,30 @@ export class NotificationsService {
       .leftJoinAndSelect('n.complaint', 'c')
       .andWhere('c.status NOT IN (:...statuses)', { statuses: ['resolved', 'closed'] })
       .getMany();
+  }
+
+  async markReviewedByComplaintAndUser(complaintId: string, userId: string): Promise<{ ok: boolean }> {
+    // Find all notification recipients for this complaint + user that are unread
+    const recipients = await this.recipientRepo
+      .createQueryBuilder('r')
+      .innerJoin('r.notification', 'n')
+      .where('n.complaintId = :complaintId', { complaintId })
+      .andWhere('r.recipientId = :userId', { userId })
+      .andWhere('r.isRead = false')
+      .getMany();
+
+    for (const r of recipients) {
+      r.isRead = true;
+      r.readAt = new Date();
+      await this.recipientRepo.save(r);
+      // Check if all recipients of this notification are now read
+      const allRecipients = await this.recipientRepo.find({ where: { notificationId: r.notificationId } });
+      if (allRecipients.every(rec => rec.isRead)) {
+        await this.notifRepo.update(r.notificationId, { allRead: true });
+      }
+    }
+
+    return { ok: true };
   }
 
   async incrementReminderCount(recipientId: string): Promise<void> {

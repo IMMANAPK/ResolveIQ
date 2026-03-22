@@ -20,7 +20,7 @@ export class NotificationRecipient extends BaseEntity {
   notificationId: string;
 
   @ManyToOne(() => User)
-  @JoinColumn()
+  @JoinColumn({ name: 'recipientId' })
   recipient: User;
 
   @Column()

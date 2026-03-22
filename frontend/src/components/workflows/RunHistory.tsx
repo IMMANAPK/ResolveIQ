@@ -2,7 +2,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useWorkflowRuns, useComplaintWorkflowRuns } from "@/hooks/useWorkflows";
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 
-export function RunHistory({ workflowId, complaintId }: { workflowId?: string; complaintId?: string }) {
+export function RunHistory({ workflowId, complaintId, complaintTitle }: { workflowId?: string; complaintId?: string; complaintTitle?: string }) {
   const wfRuns = useWorkflowRuns(workflowId || '');
   const compRuns = useComplaintWorkflowRuns(complaintId || '');
 
@@ -25,14 +25,19 @@ export function RunHistory({ workflowId, complaintId }: { workflowId?: string; c
               {run.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-green-500" /> :
                run.status === 'failed' ? <XCircle className="h-4 w-4 text-red-500" /> :
                <Clock className="h-4 w-4 text-amber-500" />}
-              <span className="font-medium capitalize">{run.status}</span>
+              <div>
+                <span className="font-medium capitalize">{run.status}</span>
+                {run.workflow?.name && (
+                  <span className="ml-2 text-xs text-muted-foreground">— {run.workflow.name}</span>
+                )}
+              </div>
             </div>
             <div className="text-xs text-muted-foreground">
               {run.startedAt && formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
-             <div>Complaint ID: <span className="font-mono text-foreground">{run.complaintId}</span></div>
+             <div>Complaint: <span className="text-foreground">{complaintTitle ?? run.complaintId?.slice(0, 8) + '…'}</span></div>
              <div>Trigger: <span className="capitalize text-foreground">{run.triggeredBy}</span></div>
           </div>
           {run.error && (

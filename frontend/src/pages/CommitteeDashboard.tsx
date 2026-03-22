@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import api from "@/lib/api";
 import { motion } from "framer-motion";
 import { FileText, Eye, Bell, AlertTriangle, CheckCircle, Clock, ArrowUpRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -47,9 +48,14 @@ export default function CommitteeDashboard() {
   const escalatedCount = assignedComplaints.filter(c => c.status === "assigned" || c.status === "open").length; // proxy for escalations until we sync models perfectly
   const myNotifs = notifications.slice(0, 5);
 
-  const markAsViewed = useCallback((complaintId: string) => {
+  const markAsViewed = useCallback(async (complaintId: string) => {
     setLocalViews(prev => ({ ...prev, [complaintId]: true }));
-    toast.success(`Marked ${complaintId.slice(0, 8)} as reviewed`);
+    try {
+      await api.patch(`/notifications/complaint/${complaintId}/mark-reviewed`);
+      toast.success('Marked as reviewed');
+    } catch {
+      toast.error('Failed to mark as reviewed');
+    }
   }, []);
 
   const [tab, setTab] = useState<"pending" | "reviewed" | "all">("pending");

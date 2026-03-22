@@ -286,7 +286,7 @@ export default function ComplaintDetail() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Workflow Runs</h2>
             <div className="max-h-80 overflow-y-auto border rounded-md">
-              <RunHistory complaintId={complaint.id} />
+              <RunHistory complaintId={complaint.id} complaintTitle={complaint.title} />
             </div>
           </motion.div>
 

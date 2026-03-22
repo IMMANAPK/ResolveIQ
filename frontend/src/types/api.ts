@@ -172,6 +172,7 @@ export type ApiWorkflowRunStatus = 'running' | 'completed' | 'failed' | 'cancell
 export interface ApiWorkflowRun {
   id: string;
   workflowId: string;
+  workflow?: { id: string; name: string };
   definitionVersion: number;
   complaintId: string;
   status: ApiWorkflowRunStatus;
