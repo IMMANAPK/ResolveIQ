@@ -47,5 +47,19 @@ export class AppModule implements OnModuleInit {
       });
       console.log('Default admin user created: admin@resolveiq.com / adminpassword');
     }
+
+    // Seed a default committee member if none exist
+    const committeeMembers = await this.usersService.getCommitteeMembers();
+    if (committeeMembers.length === 0) {
+      console.log('Seeding default committee member...');
+      await this.usersService.createUser({
+        email: 'committee@resolveiq.com',
+        password: 'committeepassword',
+        fullName: 'John Committee',
+        role: UserRole.COMMITTEE_MEMBER,
+        department: 'HR',
+      });
+      console.log('Default committee member created: committee@resolveiq.com / committeepassword');
+    }
   }
 }

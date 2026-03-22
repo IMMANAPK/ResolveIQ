@@ -70,12 +70,20 @@ export class NotificationsService {
 
   async markRecipientAsRead(trackingId: string): Promise<NotificationRecipient | null> {
     const recipient = await this.recipientRepo.findOne({ where: { trackingId } });
-    if (!recipient || recipient.isRead) return recipient ?? null;
-    recipient.isRead = true;
-    recipient.readAt = new Date();
-    const saved = await this.recipientRepo.save(recipient);
-    await this.checkAndMarkAllRead(recipient.notificationId);
-    return saved;
+    if (!recipient) return null;
+    
+    if (!recipient.isRead) {
+      recipient.isRead = true;
+      recipient.readAt = new Date();
+      await this.recipientRepo.save(recipient);
+      await this.checkAndMarkAllRead(recipient.notificationId);
+    }
+
+    // Always fetch with recipient details for the socket event
+    return this.recipientRepo.findOne({
+      where: { trackingId },
+      relations: ['recipient']
+    });
   }
 
   private async checkAndMarkAllRead(notificationId: string): Promise<void> {

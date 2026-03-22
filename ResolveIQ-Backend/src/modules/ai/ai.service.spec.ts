@@ -1,13 +1,24 @@
 import { Test } from '@nestjs/testing';
 import { AiService } from './ai.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('AiService', () => {
   let service: AiService;
 
   beforeEach(async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key';
     const module = await Test.createTestingModule({
-      providers: [AiService],
+      providers: [
+        AiService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'GEMINI_API_KEY') return 'test-key';
+              return null;
+            }),
+          },
+        },
+      ],
     }).compile();
     service = module.get<AiService>(AiService);
   });

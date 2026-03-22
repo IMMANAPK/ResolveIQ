@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { ConfigService } from '@nestjs/config';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
 
@@ -22,10 +23,15 @@ export interface GeneratedReminder {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private client: Anthropic;
+  private genAI: GoogleGenerativeAI;
 
-  constructor() {
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  constructor(private configService: ConfigService) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (apiKey) {
+      this.genAI = new GoogleGenerativeAI(apiKey);
+    } else {
+      this.logger.warn('GEMINI_API_KEY not found in environment variables');
+    }
   }
 
   determineTone(priority: string, reminderCount: number): ReminderTone {
@@ -67,23 +73,30 @@ Subject: <subject line>
   }
 
   async generateReminderEmail(ctx: ReminderPromptContext): Promise<GeneratedReminder> {
-    try {
-      const message = await this.client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 512,
-        messages: [{ role: 'user', content: this.buildReminderPrompt(ctx) }],
-      });
+    if (!this.genAI) {
+      this.logger.error('Gemini AI not initialized (missing API key)');
+      return this.fallbackReminder(ctx);
+    }
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : '';
+    try {
+      // Using 'gemini-pro' as it has wider availability across all API versions
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const result = await model.generateContent(this.buildReminderPrompt(ctx));
+      const response = await result.response;
+      const text = response.text();
+
       const lines = text.trim().split('\n');
-      const subjectLine = lines.find((l) => l.startsWith('Subject:'));
-      const subject = subjectLine?.replace('Subject:', '').trim() ?? `[Reminder] Action Required: ${ctx.complaintTitle}`;
-      const bodyStart = lines.findIndex((l) => l.startsWith('Subject:')) + 2;
-      const body = lines.slice(bodyStart).join('\n').trim();
+      const subjectLine = lines.find((l) => l.toLowerCase().startsWith('subject:'));
+      const subject = subjectLine?.replace(/subject:/i, '').trim() ?? `[Reminder] Action Required: ${ctx.complaintTitle}`;
+      
+      const subjectIndex = lines.findIndex((l) => l.toLowerCase().startsWith('subject:'));
+      // Extract body: take everything after the subject line, filter out empty lines at start
+      const bodyLines = lines.slice(subjectIndex !== -1 ? subjectIndex + 1 : 0);
+      const body = bodyLines.join('\n').trim();
 
       return { subject, body, tone: ctx.tone };
     } catch (err) {
-      this.logger.error('AI generation failed, using fallback', err);
+      this.logger.error('Gemini AI generation failed, using fallback', err);
       return this.fallbackReminder(ctx);
     }
   }

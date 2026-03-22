@@ -35,7 +35,14 @@ export class ComplaintsService {
   async findById(id: string): Promise<Complaint | null> {
     return this.repo.findOne({
       where: { id },
-      relations: ['raisedBy', 'timeline', 'aiActions', 'notifications', 'notifications.recipients'],
+      relations: [
+        'raisedBy', 
+        'timeline', 
+        'aiActions', 
+        'notifications', 
+        'notifications.recipients', 
+        'notifications.recipients.recipient'
+      ],
       order: { timeline: { createdAt: 'DESC' } },
     });
   }

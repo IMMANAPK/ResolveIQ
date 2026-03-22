@@ -7,5 +7,5 @@ export const databaseConfig = () => ({
   database: process.env.DB_DATABASE ?? 'resolveiq',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   synchronize: process.env.NODE_ENV !== 'production',
-  logging: process.env.NODE_ENV === 'development',
+  logging: false,
 });
