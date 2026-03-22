@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { apiFetch } from '@/lib/api';
+import { socket } from '@/lib/socket';
 
 export type UserRole = 'admin' | 'complainant' | 'committee_member' | 'manager';
 
@@ -37,7 +38,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
-      // If we have a token but user state is empty (e.g. fresh page load with token in localStorage)
       if (token && !user) {
         try {
           const userData = await apiFetch<User>('/auth/profile');
@@ -49,7 +49,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
-      // If it's the initial mount, we've checked the token/user from localStorage or fetched profile
       if (isInitialMount.current) {
         setIsLoading(false);
         isInitialMount.current = false;
@@ -59,12 +58,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, [token]);
 
+  useEffect(() => {
+    if (token) {
+      socket.connect();
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [token]);
+
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
-    setIsLoading(false); // Explicitly set loading to false on successful login
+    setIsLoading(false);
   };
 
   const logout = () => {
@@ -73,6 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     setIsLoading(false);
+    socket.disconnect();
   };
 
   return (

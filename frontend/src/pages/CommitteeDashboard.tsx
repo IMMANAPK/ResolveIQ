@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { FileText, Eye, Bell, AlertTriangle, CheckCircle, Clock, ArrowUpRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/cms/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { socket } from "@/lib/socket";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
@@ -20,6 +21,20 @@ export default function CommitteeDashboard() {
     queryFn: () => apiFetch<any[]>('/complaints'),
     enabled: !!user,
   });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['committee-complaints'] });
+    };
+
+    socket.on('notification:read', handleUpdate);
+    socket.on('escalation:triggered', handleUpdate);
+
+    return () => {
+      socket.off('notification:read', handleUpdate);
+      socket.off('escalation:triggered', handleUpdate);
+    };
+  }, [queryClient]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string, status: string }) => 

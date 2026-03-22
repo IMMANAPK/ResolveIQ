@@ -1,16 +1,33 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { FileText, Clock, Eye, AlertTriangle, ArrowUpRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { StatCard } from "@/components/cms/StatCard";
 import { StatusBadge } from "@/components/cms/StatusBadge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { socket } from "@/lib/socket";
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
   const { data: complaints, isLoading } = useQuery({
     queryKey: ['admin-complaints'],
     queryFn: () => apiFetch<any[]>('/complaints'),
   });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-complaints'] });
+    };
+
+    socket.on('notification:read', handleUpdate);
+    socket.on('escalation:triggered', handleUpdate);
+
+    return () => {
+      socket.off('notification:read', handleUpdate);
+      socket.off('escalation:triggered', handleUpdate);
+    };
+  }, [queryClient]);
 
   if (isLoading) {
     return (

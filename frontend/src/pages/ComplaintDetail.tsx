@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, CheckCircle2, MessageSquare } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, MessageSquare, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/cms/StatusBadge";
 import { StatusStepper } from "@/components/cms/StatusStepper";
@@ -10,6 +10,7 @@ import { AIActionPanel } from "@/components/cms/AIActionPanel";
 import { ActivityTimeline } from "@/components/cms/ActivityTimeline";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { socket } from "@/lib/socket";
 import { toast } from "sonner";
 
 export default function ComplaintDetail() {
@@ -21,6 +22,33 @@ export default function ComplaintDetail() {
     queryFn: () => apiFetch<any>(`/complaints/${id}`),
     enabled: !!id,
   });
+
+  useEffect(() => {
+    if (id) {
+      socket.emit('join:complaint', id);
+      
+      const handleNotificationRead = (data: any) => {
+        console.log("Socket: notification read event received", data);
+        queryClient.invalidateQueries({ queryKey: ['complaint', id] });
+      };
+
+      const handleEscalation = (data: any) => {
+        console.log("Socket: escalation triggered event received", data);
+        if (data.complaintId === id) {
+          queryClient.invalidateQueries({ queryKey: ['complaint', id] });
+          toast.info(`AI Alert: ${data.message}`);
+        }
+      };
+
+      socket.on('notification:read', handleNotificationRead);
+      socket.on('escalation:triggered', handleEscalation);
+
+      return () => {
+        socket.off('notification:read', handleNotificationRead);
+        socket.off('escalation:triggered', handleEscalation);
+      };
+    }
+  }, [id, queryClient]);
 
   const updateStatusMutation = useMutation({
     mutationFn: (status: string) => 
@@ -45,7 +73,6 @@ export default function ComplaintDetail() {
     },
     onSuccess: () => {
       toast.success("Escalation step triggered");
-      // History might take a second to update via BullMQ
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ['complaint', id] }), 2000);
     },
     onError: (err: any) => {
@@ -72,13 +99,32 @@ export default function ComplaintDetail() {
     );
   }
 
-  // Map recipients from latest notification
-  const latestNotif = complaint.notifications?.[0];
-  const recipients = latestNotif?.recipients?.map((r: any) => ({
-    name: r.recipient?.fullName || `User ${r.recipientId.split('-')[0]}`,
-    seen: r.isRead,
-    time: r.readAt ? new Date(r.readAt).toLocaleTimeString() : undefined
-  })) || [];
+  // Aggregate unique recipients across all notifications (initial + reminders)
+  const recipientMap = new Map<string, any>();
+  
+  console.log("Complaint notifications from backend:", complaint.notifications);
+
+  complaint.notifications?.forEach((notif: any) => {
+    notif.recipients?.forEach((r: any) => {
+      const existing = recipientMap.get(r.recipientId);
+      // If not in map, or if this record is "read" while existing isn't, update it
+      if (!existing || (r.isRead && !existing.seen)) {
+        recipientMap.set(r.recipientId, {
+          name: r.recipient?.fullName || `User ${r.recipientId.split('-')[0]}`,
+          seen: r.isRead,
+          time: r.readAt ? new Date(r.readAt).toLocaleTimeString() : undefined,
+          readAtRaw: r.readAt
+        });
+      }
+    });
+  });
+
+  const recipients = Array.from(recipientMap.values()).sort((a, b) => {
+    if (a.seen === b.seen) return 0;
+    return a.seen ? -1 : 1;
+  });
+
+  console.log("Mapped recipients for UI component:", recipients);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
@@ -115,16 +161,12 @@ export default function ComplaintDetail() {
         </div>
       </div>
 
-      {/* Status Stepper */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
         <StatusStepper current={complaint.status} />
       </motion.div>
 
-      {/* Content Grid */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Column */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Description */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="card-surface p-5">
             <h2 className="text-sm font-semibold text-foreground">Description</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{complaint.description}</p>
@@ -133,16 +175,13 @@ export default function ComplaintDetail() {
             </div>
           </motion.div>
 
-          {/* Activity Timeline */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Activity Timeline</h2>
             <ActivityTimeline events={complaint.timeline || []} />
           </motion.div>
         </div>
 
-        {/* Right Column */}
         <div className="space-y-6">
-          {/* Recipient Tracking */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card-surface p-5">
             <h2 className="mb-4 text-sm font-semibold text-foreground">Recipient Tracking</h2>
             {recipients.length > 0 ? (
@@ -152,7 +191,6 @@ export default function ComplaintDetail() {
             )}
           </motion.div>
 
-          {/* AI Actions */}
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <AIActionPanel
               actions={complaint.aiActions || []}
