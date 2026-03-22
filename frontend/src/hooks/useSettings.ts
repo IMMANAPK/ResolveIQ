@@ -33,6 +33,15 @@ export function useTestAi() {
   });
 }
 
+export function useTestCloudinary() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/admin/settings/test-cloudinary');
+      return data as { success: boolean, timeMs: number, detail?: any, error?: string };
+    }
+  });
+}
+
 export function useTestEmail() {
   return useMutation({
     mutationFn: async (payload: { to: string }) => {

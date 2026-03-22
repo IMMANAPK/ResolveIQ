@@ -124,11 +124,13 @@ const SEED_WORKFLOWS = [
               'A high-priority complaint has been submitted and needs immediate review.',
           },
         },
+        { id: 'n5', type: 'end', config: {} },
       ],
       edges: [
         { id: 'e1', from: 'n1', to: 'n2' },
         { id: 'e2', from: 'n2', to: 'n3' },
         { id: 'e3', from: 'n3', to: 'n4', condition: 'true' },
+        { id: 'e4', from: 'n3', to: 'n5', condition: 'false' },
       ],
     },
   },
@@ -305,6 +307,25 @@ async function bootstrap() {
       console.log(`  ✅ Created: ${c.name} [${c.categories.join(', ') || 'no category mapping'}]`);
     } catch (e: any) {
       console.error(`  ❌ Failed:  ${c.name} — ${e.message}`);
+    }
+  }
+
+  // ── Assign committee members to their committees ──────────────────────────
+  console.log('\n👥 Assigning committee members...\n');
+  const allCommitteesForAssign = await committeesService.findAll();
+  const memberAssignments: { email: string; committeeName: string }[] = [
+    { email: 'immanuel53447+womens@gmail.com', committeeName: "Womens Safety Committee" },
+    { email: 'immanuel53447+cleaning@gmail.com', committeeName: 'Cleaning Committee' },
+    { email: 'immanuel53447+general@gmail.com', committeeName: 'General Committee' },
+    { email: 'immanuel53447+food@gmail.com', committeeName: 'Food Committee' },
+    { email: 'immanuel53447+complainant2@gmail.com', committeeName: 'General Committee' },
+  ];
+  for (const { email, committeeName } of memberAssignments) {
+    const user = await usersService.findByEmail(email);
+    const committee = allCommitteesForAssign.find(c => c.name === committeeName);
+    if (user && committee) {
+      await usersService.updateCommittee(user.id, committee.id);
+      console.log(`  ✅ ${email} → ${committeeName}`);
     }
   }
 

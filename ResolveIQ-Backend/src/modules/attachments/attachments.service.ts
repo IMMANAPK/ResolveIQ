@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { v2 as cloudinary } from 'cloudinary';
 import { Attachment } from './attachment.entity';
 import { Complaint } from '../complaints/entities/complaint.entity';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class AttachmentsService {
@@ -17,11 +18,14 @@ export class AttachmentsService {
     private readonly repo: Repository<Attachment>,
     @InjectRepository(Complaint)
     private readonly complaintRepo: Repository<Complaint>,
-  ) {
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  private configureCloudinary() {
     cloudinary.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET,
+      cloud_name: this.settingsService.get('cloudinary.cloudName') || process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: this.settingsService.get('cloudinary.apiKey') || process.env.CLOUDINARY_API_KEY,
+      api_secret: this.settingsService.get('cloudinary.apiSecret') || process.env.CLOUDINARY_API_SECRET,
     });
   }
 
@@ -46,6 +50,7 @@ export class AttachmentsService {
     const count = await this.repo.count({ where: { complaintId } });
     if (count >= 3) throw new BadRequestException('Maximum 3 attachments per complaint');
 
+    this.configureCloudinary();
     const { url, publicId, resourceType } = await this.uploadToCloudinary(file);
 
     try {
@@ -79,6 +84,7 @@ export class AttachmentsService {
       throw new ForbiddenException('You can only delete your own attachments');
     }
 
+    this.configureCloudinary();
     await cloudinary.uploader.destroy(attachment.publicId, {
       resource_type: attachment.resourceType as any,
     }).catch(e => this.logger.error(`Cloudinary delete failed: ${e}`));

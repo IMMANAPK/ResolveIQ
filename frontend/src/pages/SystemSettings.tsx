@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useSettings, useUpdateSettings, useTestAi, useTestEmail } from "@/hooks/useSettings";
+import { useSettings, useUpdateSettings, useTestAi, useTestEmail, useTestCloudinary } from "@/hooks/useSettings";
 import { Loader2 } from "lucide-react";
 
 export default function SystemSettings() {
@@ -12,6 +12,7 @@ export default function SystemSettings() {
   const updateMutation = useUpdateSettings();
   const testAiMutation = useTestAi();
   const testEmailMutation = useTestEmail();
+  const testCloudinaryMutation = useTestCloudinary();
 
   const [form, setForm] = useState<Record<string, any>>({});
   const [testEmailAddr, setTestEmailAddr] = useState<string>("");
@@ -87,6 +88,7 @@ export default function SystemSettings() {
         <TabsList>
           <TabsTrigger value="ai">AI Configuration</TabsTrigger>
           <TabsTrigger value="email">Email Configuration</TabsTrigger>
+          <TabsTrigger value="cloudinary">Cloudinary</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ai" className="space-y-6">
@@ -149,6 +151,39 @@ export default function SystemSettings() {
                   Test Email
                 </Button>
               </div>
+            </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="cloudinary" className="space-y-6">
+          <div className="card-surface p-6 space-y-4">
+            <h2 className="text-lg font-semibold border-b pb-2">Cloudinary (File Attachments)</h2>
+            <div className="space-y-2">
+              <Label>Cloud Name</Label>
+              <Input value={form['cloudinary.cloudName'] || ''} onChange={(e) => handleUpdate('cloudinary.cloudName', e.target.value)} placeholder="your-cloud-name or reads from ENV" />
+            </div>
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <Input type="password" value={form['cloudinary.apiKey'] || ''} onChange={(e) => handleUpdate('cloudinary.apiKey', e.target.value)} placeholder="123456789012345" />
+            </div>
+            <div className="space-y-2">
+              <Label>API Secret</Label>
+              <Input type="password" value={form['cloudinary.apiSecret'] || ''} onChange={(e) => handleUpdate('cloudinary.apiSecret', e.target.value)} placeholder="••••••••••••••••••••••••••" />
+            </div>
+            <div className="pt-4 flex items-center justify-between">
+              <Button onClick={() => handleSave(['cloudinary.cloudName', 'cloudinary.apiKey', 'cloudinary.apiSecret'])} disabled={updateMutation.isPending}>
+                {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Cloudinary Settings
+              </Button>
+              <Button variant="outline" onClick={async () => {
+                try {
+                  const result = await testCloudinaryMutation.mutateAsync();
+                  if (result.success) toast.success(`Cloudinary connected! (${result.timeMs}ms)`);
+                  else toast.error(`Failed: ${result.error}`);
+                } catch (err: any) { toast.error(`Test failed: ${err.message}`); }
+              }} disabled={testCloudinaryMutation.isPending}>
+                {testCloudinaryMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Test Connection
+              </Button>
             </div>
           </div>
         </TabsContent>

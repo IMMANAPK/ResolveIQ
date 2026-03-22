@@ -15,6 +15,9 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() 'email.smtpUser'?: string;
   @IsOptional() @IsString() 'email.smtpPass'?: string;
   @IsOptional() @IsString() 'email.fromAddress'?: string;
+  @IsOptional() @IsString() 'cloudinary.cloudName'?: string;
+  @IsOptional() @IsString() 'cloudinary.apiKey'?: string;
+  @IsOptional() @IsString() 'cloudinary.apiSecret'?: string;
 }
 
 @Controller('admin/settings')
@@ -37,6 +40,9 @@ export class SettingsController {
       'email.smtpUser',
       'email.smtpPass',
       'email.fromAddress',
+      'cloudinary.cloudName',
+      'cloudinary.apiKey',
+      'cloudinary.apiSecret',
     ];
     const settings = await this.settingsService.getMultiple(keys);
     for (const k of keys) {
@@ -48,14 +54,15 @@ export class SettingsController {
   }
 
   @Put()
-  async updateSettings(@Body() body: UpdateSettingsDto) {
-    const records = body as Record<string, any>;
+  async updateSettings(@Body() body: Record<string, any>) {
+    const records = body;
     
     for (const key of Object.keys(records)) {
-      if (records[key] === '********') continue;
-      
-      const isSensitive = key.toLowerCase().includes('key') || key.toLowerCase().includes('pass');
-      await this.settingsService.set(key, records[key] ?? '', isSensitive);
+      const value = records[key];
+      if (value === '********' || value === undefined || value === null || value === '') continue;
+
+      const isSensitive = key.toLowerCase().includes('key') || key.toLowerCase().includes('pass') || key.toLowerCase().includes('secret');
+      await this.settingsService.set(key, value, isSensitive);
     }
     return { success: true };
   }
@@ -75,6 +82,23 @@ export class SettingsController {
     } catch (err: any) {
       const timeMs = Date.now() - start;
       return { success: false, error: err.message, timeMs };
+    }
+  }
+
+  @Post('test-cloudinary')
+  async testCloudinary() {
+    const start = Date.now();
+    try {
+      const { v2: cloudinary } = await import('cloudinary');
+      cloudinary.config({
+        cloud_name: this.settingsService.get('cloudinary.cloudName') || process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: this.settingsService.get('cloudinary.apiKey') || process.env.CLOUDINARY_API_KEY,
+        api_secret: this.settingsService.get('cloudinary.apiSecret') || process.env.CLOUDINARY_API_SECRET,
+      });
+      const result = await cloudinary.api.ping();
+      return { success: true, timeMs: Date.now() - start, detail: result };
+    } catch (err: any) {
+      return { success: false, timeMs: Date.now() - start, error: err.message || JSON.stringify(err) };
     }
   }
 

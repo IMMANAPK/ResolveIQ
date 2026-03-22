@@ -56,7 +56,12 @@ export class NotificationRulesService {
       if (rule.recipientRoles?.length > 0) {
         for (const user of allUsers) {
           if (user.roles?.some((r) => rule.recipientRoles.includes(r as any))) {
-            userIdSet.add(user.id);
+            // For committee_member role, only include users assigned to this committee
+            if (rule.recipientRoles.includes('committee_member' as any) && user.roles?.includes('committee_member' as any)) {
+              if (user.committeeId === committeeId) userIdSet.add(user.id);
+            } else {
+              userIdSet.add(user.id);
+            }
           }
         }
       }
