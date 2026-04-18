@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Notification } from './notification.entity';
 import { User } from '../../users/entities/user.entity';
@@ -11,6 +11,11 @@ export enum DeliveryStatus {
 }
 
 @Entity('notification_recipients')
+@Index(['notificationId'])
+@Index(['recipientId'])
+@Index(['isRead'])
+@Index(['deliveryStatus'])
+@Index(['recipientId', 'isRead']) // Composite for user notification queries
 export class NotificationRecipient extends BaseEntity {
   @ManyToOne(() => Notification, (n) => n.recipients)
   @JoinColumn()

@@ -19,6 +19,7 @@ import { sendNotificationHandler } from './node-handlers/send-notification.handl
 import { sendEmailHandler } from './node-handlers/send-email.handler';
 import { updateComplaintHandler } from './node-handlers/update-complaint.handler';
 import { delayHandler } from './node-handlers/delay.handler';
+import { endHandler } from './node-handlers/end.handler';
 
 @Processor('workflow-steps')
 export class WorkflowStepProcessor {
@@ -32,6 +33,7 @@ export class WorkflowStepProcessor {
     send_email: sendEmailHandler,
     update_complaint: updateComplaintHandler,
     delay: delayHandler,
+    end: endHandler,
   };
 
   constructor(

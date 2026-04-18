@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Committee } from '../../committees/entities/committee.entity';
@@ -42,6 +42,14 @@ export enum RoutingMethod {
 export type SentimentLabel = 'frustrated' | 'angry' | 'neutral' | 'concerned' | 'satisfied';
 
 @Entity('complaints')
+@Index(['status'])
+@Index(['priority'])
+@Index(['category'])
+@Index(['raisedById'])
+@Index(['committeeId'])
+@Index(['createdAt'])
+@Index(['slaDeadline'])
+@Index(['status', 'committeeId']) // Composite index for common query pattern
 export class Complaint extends BaseEntity {
   @Column()
   title: string;

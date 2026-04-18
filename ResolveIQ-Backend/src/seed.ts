@@ -216,7 +216,7 @@ const SEED_WORKFLOWS = [
         {
           id: 'n2',
           type: 'delay',
-          config: { delayMs: 86400000 }, // 24 hours
+          config: { minutes: 1440 }, // 24 hours
         },
         {
           id: 'n3',
