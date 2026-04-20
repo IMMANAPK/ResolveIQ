@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintsController } from './complaints.controller';
@@ -9,6 +9,7 @@ import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { AiModule } from '../ai/ai.module';
 import { CommitteesModule } from '../committees/committees.module';
+import { GatewayModule } from '../gateway/gateway.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CommitteesModule } from '../committees/committees.module';
     UsersModule,
     AiModule,
     CommitteesModule,
+    GatewayModule,
   ],
   providers: [ComplaintsService, ComplaintNotifierService],
   controllers: [ComplaintsController],

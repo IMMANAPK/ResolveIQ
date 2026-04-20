@@ -39,14 +39,14 @@ export class ComplaintNotifierService {
       this.logger.log(`Groq routed "${complaint.title}" → "${targetCommitteeName}" (${routing.confidence}). Reason: ${routingReason}`);
     }
 
-    const allMembers = await this.usersService.getCommitteeMembers();
-    let recipients = allMembers.filter(
-      (u) => u.department?.toLowerCase() === targetCommitteeName!.toLowerCase(),
-    );
+    const targetCommittee = mappedCommittee ?? await this.committeesService.findByName(targetCommitteeName!);
+    let recipients = targetCommittee
+      ? await this.usersService.getMembersByCommittee(targetCommittee.id)
+      : [];
 
     if (recipients.length === 0) {
       this.logger.warn(`No members found for "${targetCommitteeName}", falling back to all committee members`);
-      recipients = allMembers;
+      recipients = await this.usersService.getCommitteeMembers();
     }
 
     const filerExcluded = recipients.filter((u) => u.id !== complaint.raisedById);
@@ -121,28 +121,30 @@ export class ComplaintNotifierService {
 
     const trackingMap = new Map(notification.recipients.map((nr) => [nr.recipientId, nr.trackingId]));
 
-    for (const member of recipients) {
-      const trackingId = trackingMap.get(member.id);
-      if (!trackingId) continue;
+    await Promise.all(
+      recipients.map(async (member) => {
+        const trackingId = trackingMap.get(member.id);
+        if (!trackingId) return;
 
-      const html = this.emailService.buildNotificationHtml({
-        recipientName: member.fullName,
-        complaintTitle: complaint.title,
-        complaintId: complaint.id,
-        trackingId,
-        message: messagePrefix,
-        priority: complaint.priority,
-      });
+        const html = this.emailService.buildNotificationHtml({
+          recipientName: member.fullName,
+          complaintTitle: complaint.title,
+          complaintId: complaint.id,
+          trackingId,
+          message: messagePrefix,
+          priority: complaint.priority,
+        });
 
-      const result = await this.emailService.sendEmail({ to: member.email, subject, html });
+        const result = await this.emailService.sendEmail({ to: member.email, subject, html });
 
-      if (result.success) {
-        await this.notificationsService.markRecipientSent(trackingId, result.messageId);
-        this.logger.log(`Notification sent to ${member.email} (tracking: ${trackingId})`);
-      } else {
-        await this.notificationsService.markRecipientFailed(trackingId);
-        this.logger.warn(`Failed to send to ${member.email}`);
-      }
-    }
+        if (result.success) {
+          await this.notificationsService.markRecipientSent(trackingId, result.messageId);
+          this.logger.log(`Notification sent to ${member.email} (tracking: ${trackingId})`);
+        } else {
+          await this.notificationsService.markRecipientFailed(trackingId);
+          this.logger.warn(`Failed to send to ${member.email}`);
+        }
+      }),
+    );
   }
 }

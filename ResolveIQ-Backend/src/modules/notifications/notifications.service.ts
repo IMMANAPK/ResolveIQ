@@ -147,6 +147,13 @@ export class NotificationsService {
     });
   }
 
+  async findById(id: string): Promise<Notification | null> {
+    return this.notifRepo.findOne({
+      where: { id },
+      relations: ['recipients', 'recipients.recipient', 'complaint'],
+    });
+  }
+
   async getUnacknowledgedNotifications(olderThanMinutes: number, limit = 50): Promise<Notification[]> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
     return this.notifRepo

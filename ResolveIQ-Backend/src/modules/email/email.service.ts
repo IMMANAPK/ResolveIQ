@@ -14,11 +14,21 @@ export interface SendEmailOptions {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly appBaseUrl: string;
+  private readonly smtpTransporter?: nodemailer.Transporter;
 
   constructor() {
     this.appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3000';
     if (process.env.SENDGRID_API_KEY) {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    } else {
+      this.smtpTransporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'localhost',
+        port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+        secure: false,
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+          : undefined,
+      });
     }
   }
 
@@ -38,15 +48,7 @@ export class EmailService {
         return { success: true, messageId: response.headers['x-message-id'] as string };
       }
       // Fallback: Nodemailer (dev / SMTP)
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST ?? 'localhost',
-        port: parseInt(process.env.SMTP_PORT ?? '587', 10),
-        secure: false,
-        auth: process.env.SMTP_USER
-          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-          : undefined,
-      });
-      const info = await transporter.sendMail({ from, ...options });
+      const info = await this.smtpTransporter!.sendMail({ from, ...options });
       return { success: true, messageId: info.messageId };
     } catch (err) {
       this.logger.error(`Failed to send email to ${options.to}`, err);

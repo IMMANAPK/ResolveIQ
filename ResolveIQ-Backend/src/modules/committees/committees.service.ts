@@ -36,16 +36,22 @@ export class CommitteesService {
     await this.repo.delete(id);
   }
 
+  async findByName(name: string): Promise<Committee | null> {
+    return this.repo.findOne({ where: { name } });
+  }
+
   /** Find which committee handles a given complaint category */
   async findByCategory(category: ComplaintCategory): Promise<Committee | null> {
-    const all = await this.repo.find();
-    return all.find((c) => c.categories?.includes(category)) ?? null;
+    return this.repo
+      .createQueryBuilder('c')
+      .where('c.categories @> :cat::jsonb', { cat: JSON.stringify([category]) })
+      .leftJoinAndSelect('c.manager', 'm')
+      .getOne();
   }
 
   /** Get all committee names (for AI routing prompt) */
   async getCommitteeNames(): Promise<string[]> {
-    const all = await this.repo.find();
-    return all.map((c) => c.name);
+    return this.repo.find().then((all) => all.map((c) => c.name));
   }
 
   /** Get committees with their descriptions for AI prompt */

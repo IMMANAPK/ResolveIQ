@@ -16,6 +16,15 @@ export class UsersService {
     return this.repo.findOne({ where: { id } });
   }
 
+  async getMembersByCommittee(committeeId: string): Promise<User[]> {
+    return this.repo
+      .createQueryBuilder('u')
+      .where('u.isActive = :active', { active: true })
+      .andWhere('u.committeeId = :committeeId', { committeeId })
+      .andWhere('u.roles @> :role::jsonb', { role: JSON.stringify([UserRole.COMMITTEE_MEMBER]) })
+      .getMany();
+  }
+
   async getAvailableCommitteeMembers(): Promise<User[]> {
     return this.repo
       .createQueryBuilder('u')

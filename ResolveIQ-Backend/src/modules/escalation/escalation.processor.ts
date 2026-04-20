@@ -26,10 +26,9 @@ export class EscalationProcessor {
     const { notificationId, step } = job.data;
     this.logger.log(`Processing escalation step=${step} for notification=${notificationId}`);
 
-    const notifications = await this.notificationsService.getUnacknowledgedNotifications(0);
-    const notification = notifications.find((n) => n.id === notificationId);
-    if (!notification) {
-      this.logger.log(`Notification ${notificationId} already fully read, skipping`);
+    const notification = await this.notificationsService.findById(notificationId);
+    if (!notification || notification.allRead) {
+      this.logger.log(`Notification ${notificationId} already acknowledged, skipping`);
       return;
     }
 

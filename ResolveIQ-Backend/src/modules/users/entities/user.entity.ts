@@ -31,6 +31,9 @@ export class User extends BaseEntity {
   department?: string;
 
   @Column({ nullable: true })
+  committeeId?: string;
+
+  @Column({ nullable: true })
   phone?: string;
 
   @Column({ default: true })

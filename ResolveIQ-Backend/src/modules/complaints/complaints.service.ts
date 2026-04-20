@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from './entities/complaint.entity';
 import { ComplaintNotifierService } from './complaint-notifier.service';
+import { EventsGateway } from '../gateway/events.gateway';
 
 export interface CreateComplaintData {
   title: string;
@@ -19,6 +20,7 @@ export class ComplaintsService {
   constructor(
     @InjectRepository(Complaint) private repo: Repository<Complaint>,
     private notifier: ComplaintNotifierService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   async create(data: CreateComplaintData): Promise<Complaint> {
@@ -53,7 +55,9 @@ export class ComplaintsService {
     complaint.status = status;
     if (resolutionNotes) complaint.resolutionNotes = resolutionNotes;
     if (status === ComplaintStatus.RESOLVED) complaint.resolvedAt = new Date();
-    return this.repo.save(complaint);
+    const updated = await this.repo.save(complaint);
+    this.eventsGateway.emitComplaintUpdated({ complaintId: id, status });
+    return updated;
   }
 
   async createAndNotify(data: CreateComplaintData): Promise<Complaint> {
