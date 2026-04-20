@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { Repository } from 'typeorm';
 import { EscalationLog, EscalationStep, EscalationStatus } from './entities/escalation-log.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -8,6 +10,7 @@ import { EmailService } from '../email/email.service';
 import { UsersService } from '../users/users.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { NotificationType, NotificationChannel, Notification } from '../notifications/entities/notification.entity';
+import { EMAIL_QUEUE, EmailJobData } from '../email/email.processor';
 
 @Injectable()
 export class EscalationService {
@@ -15,6 +18,7 @@ export class EscalationService {
 
   constructor(
     @InjectRepository(EscalationLog) private logRepo: Repository<EscalationLog>,
+    @InjectQueue(EMAIL_QUEUE) private emailQueue: Queue,
     private notificationsService: NotificationsService,
     private aiService: AiService,
     private emailService: EmailService,
@@ -40,36 +44,36 @@ export class EscalationService {
     const unreadRecipients = await this.notificationsService.getUnreadRecipients(notification.id);
     const complaint = notification.complaint;
 
-    for (const nr of unreadRecipients) {
-      const hoursElapsed = Math.floor((Date.now() - notification.createdAt.getTime()) / 3_600_000);
-      const tone = this.aiService.determineTone(complaint.priority, nr.reminderCount);
+    await Promise.all(
+      unreadRecipients.map(async (nr) => {
+        const hoursElapsed = Math.floor((Date.now() - notification.createdAt.getTime()) / 3_600_000);
+        const tone = this.aiService.determineTone(complaint.priority, nr.reminderCount);
 
-      const { subject, body } = await this.aiService.generateReminderEmail({
-        recipientName: nr.recipient?.fullName ?? 'Team Member',
-        complaintTitle: complaint.title,
-        complaintDescription: complaint.description,
-        priority: complaint.priority,
-        tone,
-        reminderCount: nr.reminderCount,
-        hoursElapsed,
-      });
+        const { subject, body } = await this.aiService.generateReminderEmail({
+          recipientName: nr.recipient?.fullName ?? 'Team Member',
+          complaintTitle: complaint.title,
+          complaintDescription: complaint.description,
+          priority: complaint.priority,
+          tone,
+          reminderCount: nr.reminderCount,
+          hoursElapsed,
+        });
 
-      const html = this.emailService.buildNotificationHtml({
-        recipientName: nr.recipient?.fullName ?? 'Team Member',
-        complaintTitle: complaint.title,
-        complaintId: complaint.id,
-        trackingId: nr.trackingId,
-        message: body,
-        priority: complaint.priority,
-      });
+        const html = this.emailService.buildNotificationHtml({
+          recipientName: nr.recipient?.fullName ?? 'Team Member',
+          complaintTitle: complaint.title,
+          complaintId: complaint.id,
+          trackingId: nr.trackingId,
+          message: body,
+          priority: complaint.priority,
+        });
 
-      const result = await this.emailService.sendEmail({
-        to: nr.recipient?.email ?? '',
-        subject,
-        html,
-      });
+        await this.emailQueue.add(
+          'send-email',
+          { to: nr.recipient?.email ?? '', subject, html, trackingId: nr.trackingId } as EmailJobData,
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
+        );
 
-      if (result.success) {
         await this.notificationsService.incrementReminderCount(nr.id);
         await this.logEscalation({
           complaintId: complaint.id,
@@ -79,10 +83,9 @@ export class EscalationService {
           metadata: { tone, hoursElapsed },
           aiGeneratedSubject: subject,
           aiGeneratedBody: body,
-          status: EscalationStatus.COMPLETED,
         });
-      }
-    }
+      }),
+    );
   }
 
   async rerouteToAvailableMembers(notification: Notification): Promise<void> {
@@ -105,35 +108,33 @@ export class EscalationService {
       recipientIds: rerouteTargets.map((m) => m.id),
     });
 
-    for (const nr of newNotification.recipients) {
-      const member = rerouteTargets.find((m) => m.id === nr.recipientId);
-      const html = this.emailService.buildNotificationHtml({
-        recipientName: member?.fullName ?? 'Team Member',
-        complaintTitle: notification.complaint?.title ?? 'Complaint',
-        complaintId: notification.complaintId,
-        trackingId: nr.trackingId,
-        message: `This complaint has been re-routed to you as previous assignees are unavailable.`,
-        priority: notification.complaint?.priority ?? 'medium',
-      });
+    await Promise.all(
+      newNotification.recipients.map(async (nr) => {
+        const member = rerouteTargets.find((m) => m.id === nr.recipientId);
+        const html = this.emailService.buildNotificationHtml({
+          recipientName: member?.fullName ?? 'Team Member',
+          complaintTitle: notification.complaint?.title ?? 'Complaint',
+          complaintId: notification.complaintId,
+          trackingId: nr.trackingId,
+          message: `This complaint has been re-routed to you as previous assignees are unavailable.`,
+          priority: notification.complaint?.priority ?? 'medium',
+        });
 
-      const result = await this.emailService.sendEmail({
-        to: member?.email ?? '',
-        subject: newNotification.subject,
-        html,
-      });
+        await this.emailQueue.add(
+          'send-email',
+          { to: member?.email ?? '', subject: newNotification.subject, html, trackingId: nr.trackingId } as EmailJobData,
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
+        );
 
-      if (result.success) {
-        await this.notificationsService.markRecipientSent(nr.trackingId);
         await this.logEscalation({
           complaintId: notification.complaintId,
           originalNotificationId: notification.id,
           targetUserId: nr.recipientId,
           step: EscalationStep.REROUTE,
           metadata: { reroutedFrom: [...unreadIds] },
-          status: EscalationStatus.COMPLETED,
         });
-      }
-    }
+      }),
+    );
 
     this.eventsGateway.emitEscalationTriggered({
       complaintId: notification.complaintId,

@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { Repository } from 'typeorm';
 import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory } from './entities/complaint.entity';
-import { ComplaintNotifierService } from './complaint-notifier.service';
 import { EventsGateway } from '../gateway/events.gateway';
+import { COMPLAINT_ROUTING_QUEUE, ComplaintRoutingJobData } from './complaint-routing.processor';
 
 export interface CreateComplaintData {
   title: string;
@@ -19,7 +21,7 @@ export class ComplaintsService {
 
   constructor(
     @InjectRepository(Complaint) private repo: Repository<Complaint>,
-    private notifier: ComplaintNotifierService,
+    @InjectQueue(COMPLAINT_ROUTING_QUEUE) private routingQueue: Queue,
     private eventsGateway: EventsGateway,
   ) {}
 
@@ -62,8 +64,10 @@ export class ComplaintsService {
 
   async createAndNotify(data: CreateComplaintData): Promise<Complaint> {
     const complaint = await this.create(data);
-    this.notifier.notifyCommittee(complaint).catch((err) =>
-      this.logger.error('Failed to notify committee', err),
+    await this.routingQueue.add(
+      'route-complaint',
+      { complaintId: complaint.id } as ComplaintRoutingJobData,
+      { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: true },
     );
     return complaint;
   }
