@@ -147,7 +147,7 @@ export class NotificationsService {
     });
   }
 
-  async getUnacknowledgedNotifications(olderThanMinutes: number): Promise<Notification[]> {
+  async getUnacknowledgedNotifications(olderThanMinutes: number, limit = 50): Promise<Notification[]> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
     return this.notifRepo
       .createQueryBuilder('n')
@@ -156,6 +156,8 @@ export class NotificationsService {
       .leftJoinAndSelect('n.recipients', 'r')
       .leftJoinAndSelect('r.recipient', 'u')
       .leftJoinAndSelect('n.complaint', 'c')
+      .orderBy('n.createdAt', 'ASC')
+      .take(limit)
       .getMany();
   }
 

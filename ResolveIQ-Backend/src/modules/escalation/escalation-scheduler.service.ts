@@ -13,6 +13,7 @@ export class EscalationSchedulerService {
   private readonly reminderMinutes = parseInt(process.env.ESCALATION_REMINDER_MINUTES ?? '60', 10);
   private readonly rerouteMinutes = parseInt(process.env.ESCALATION_REROUTE_MINUTES ?? '180', 10);
   private readonly criticalMinutes = parseInt(process.env.ESCALATION_CRITICAL_MINUTES ?? '360', 10);
+  private readonly batchSize = parseInt(process.env.ESCALATION_BATCH_SIZE ?? '50', 10);
 
   constructor(
     @InjectQueue(ESCALATION_QUEUE) private escalationQueue: Queue,
@@ -24,6 +25,7 @@ export class EscalationSchedulerService {
     this.logger.log('Running escalation check...');
     const notifications = await this.notificationsService.getUnacknowledgedNotifications(
       this.reminderMinutes,
+      this.batchSize,
     );
 
     for (const notification of notifications) {

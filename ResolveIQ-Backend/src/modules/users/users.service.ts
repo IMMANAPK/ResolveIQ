@@ -17,18 +17,28 @@ export class UsersService {
   }
 
   async getAvailableCommitteeMembers(): Promise<User[]> {
-    const all = await this.repo.find({ where: { isActive: true, isAvailable: true } });
-    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
+    return this.repo
+      .createQueryBuilder('u')
+      .where('u.isActive = :active', { active: true })
+      .andWhere('u.isAvailable = :available', { available: true })
+      .andWhere('u.roles @> :role::jsonb', { role: JSON.stringify([UserRole.COMMITTEE_MEMBER]) })
+      .getMany();
   }
 
   async getCommitteeMembers(): Promise<User[]> {
-    const all = await this.repo.find({ where: { isActive: true } });
-    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
+    return this.repo
+      .createQueryBuilder('u')
+      .where('u.isActive = :active', { active: true })
+      .andWhere('u.roles @> :role::jsonb', { role: JSON.stringify([UserRole.COMMITTEE_MEMBER]) })
+      .getMany();
   }
 
   async getManagers(): Promise<User[]> {
-    const all = await this.repo.find({ where: { isActive: true } });
-    return all.filter(u => u.roles.includes(UserRole.MANAGER));
+    return this.repo
+      .createQueryBuilder('u')
+      .where('u.isActive = :active', { active: true })
+      .andWhere('u.roles @> :role::jsonb', { role: JSON.stringify([UserRole.MANAGER]) })
+      .getMany();
   }
 
   async findAll(): Promise<User[]> {

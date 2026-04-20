@@ -21,7 +21,7 @@ export class User extends BaseEntity {
   @Column()
   fullName: string;
 
-  @Column({ type: 'simple-array', default: 'complainant' })
+  @Column({ type: 'jsonb', default: () => "'[\"complainant\"]'" })
   roles: UserRole[];
 
   @Column({ default: true })
