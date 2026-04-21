@@ -44,7 +44,4 @@ export class User extends BaseEntity {
 
   @Column({ nullable: true })
   fcmToken?: string;
-
-  @Column({ nullable: true })
-  committeeId?: string;
 }
