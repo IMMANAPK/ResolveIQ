@@ -2,6 +2,8 @@ import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards, ForbiddenE
 import { ComplaintsService } from './complaints.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ComplaintStatus } from './entities/complaint.entity';
 import { WorkflowEngineService } from '../workflows/workflow-engine.service';
@@ -78,6 +80,8 @@ export class ComplaintsController {
   }
 
   @Patch(':id/status')
+  @Roles('admin', 'manager', 'committee_member')
+  @UseGuards(RolesGuard)
   async updateStatus(
     @Param('id') id: string,
     @Body() body: { status: ComplaintStatus; resolutionNotes?: string; notifyComplainant?: boolean },

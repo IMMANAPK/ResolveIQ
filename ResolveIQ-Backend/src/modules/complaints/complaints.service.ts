@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory, AiSummaryStatus } from './entities/complaint.entity';
-import { ComplaintNotifierService } from './complaint-notifier.service';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Repository } from 'typeorm';
+import { Complaint, ComplaintStatus, ComplaintPriority, ComplaintCategory, AiSummaryStatus } from './entities/complaint.entity';
+import { EventsGateway } from '../gateway/events.gateway';
+import { COMPLAINT_ROUTING_QUEUE, ComplaintRoutingJobData } from './complaint-routing.processor';
 
 const SLA_HOURS: Record<ComplaintPriority, number> = {
   [ComplaintPriority.CRITICAL]: 4,
@@ -28,9 +28,9 @@ export class ComplaintsService {
 
   constructor(
     @InjectRepository(Complaint) private readonly repo: Repository<Complaint>,
-    private readonly notifier: ComplaintNotifierService,
+    @InjectQueue(COMPLAINT_ROUTING_QUEUE) private readonly routingQueue: Queue,
     @InjectQueue('ai-summary') private readonly aiSummaryQueue: Queue,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
   async create(data: CreateComplaintData): Promise<Complaint> {
@@ -70,18 +70,11 @@ export class ComplaintsService {
     const complaint = await this.findOrFail(id);
     complaint.status = status;
     if (resolutionNotes) complaint.resolutionNotes = resolutionNotes;
-    // Fix: set resolvedAt for both resolved AND closed
     if (status === ComplaintStatus.RESOLVED || status === ComplaintStatus.CLOSED) {
       complaint.resolvedAt = new Date();
     }
     const saved = await this.repo.save(complaint);
-    this.eventEmitter.emit('complaint.status_changed', { complaintId: id, newStatus: status });
-
-    if (notifyComplainant) {
-      this.notifier.sendStatusChangeEmail(saved, updatedByUser)
-        .catch(e => this.logger.error('sendStatusChangeEmail failed', e));
-    }
-
+    this.eventsGateway.emitComplaintUpdated({ complaintId: id, status });
     return saved;
   }
 
@@ -237,7 +230,6 @@ export class ComplaintsService {
   }
 
   async createAndNotify(data: CreateComplaintData): Promise<Complaint> {
-    // Create base complaint, then stamp AI summary fields directly on the entity
     const entity = this.repo.create({
       ...data,
       aiSummaryStatus: AiSummaryStatus.PENDING,
@@ -245,13 +237,11 @@ export class ComplaintsService {
     });
     const complaint = await this.repo.save(entity);
 
-    // Compute SLA deadline based on priority
     const slaHours = SLA_HOURS[complaint.priority] ?? 24;
     const slaDeadline = new Date(complaint.createdAt.getTime() + slaHours * 3600000);
     await this.repo.update(complaint.id, { slaDeadline });
-    complaint.slaDeadline = slaDeadline; // keep in-memory object consistent
+    complaint.slaDeadline = slaDeadline;
 
-    // Fire-and-forget — never let queue issues block the HTTP response
     this.aiSummaryQueue
       .add(
         { complaintId: complaint.id },
@@ -261,8 +251,11 @@ export class ComplaintsService {
         this.logger.error(`Failed to queue AI summary for complaint ${complaint.id}: ${err}`),
       );
 
-    this.eventEmitter.emit('complaint.created', { complaintId: complaint.id });
-
+    await this.routingQueue.add(
+      'route-complaint',
+      { complaintId: complaint.id } as ComplaintRoutingJobData,
+      { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, removeOnComplete: true },
+    );
     return complaint;
   }
 

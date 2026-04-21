@@ -150,7 +150,14 @@ export class NotificationsService {
       .getMany();
   }
 
-  async getUnacknowledgedNotifications(olderThanMinutes: number): Promise<Notification[]> {
+  async findById(id: string): Promise<Notification | null> {
+    return this.notifRepo.findOne({
+      where: { id },
+      relations: ['recipients', 'recipients.recipient', 'complaint'],
+    });
+  }
+
+  async getUnacknowledgedNotifications(olderThanMinutes: number, limit = 50): Promise<Notification[]> {
     const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
     return this.notifRepo
       .createQueryBuilder('n')
@@ -160,6 +167,8 @@ export class NotificationsService {
       .leftJoinAndSelect('r.recipient', 'u')
       .leftJoinAndSelect('n.complaint', 'c')
       .andWhere('c.status NOT IN (:...statuses)', { statuses: ['resolved', 'closed'] })
+      .orderBy('n.createdAt', 'ASC')
+      .take(limit)
       .getMany();
   }
 

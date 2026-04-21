@@ -12,11 +12,13 @@ import { AiModule } from '../ai/ai.module';
 import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { EMAIL_QUEUE } from '../email/email.processor';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EscalationLog]),
     BullModule.registerQueue({ name: ESCALATION_QUEUE }),
+    BullModule.registerQueue({ name: EMAIL_QUEUE }),
     ScheduleModule.forRoot(),
     NotificationsModule,
     AiModule,

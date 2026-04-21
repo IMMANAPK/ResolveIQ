@@ -1,130 +1,128 @@
 import { Process, Processor } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bull';
+import type { Job, Queue } from 'bull';
 import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { Job } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Complaint, RoutingMethod } from './entities/complaint.entity';
-import { AiService } from '../ai/ai.service';
+import { Complaint, ComplaintStatus } from './entities/complaint.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 import { CommitteesService } from '../committees/committees.service';
-import { NotificationRulesService } from '../notifications/notification-rules.service';
-import { ComplaintNotifierService } from './complaint-notifier.service';
+import { AiService } from '../ai/ai.service';
+import { EmailService } from '../email/email.service';
+import { EventsGateway } from '../gateway/events.gateway';
+import { NotificationType, NotificationChannel } from '../notifications/entities/notification.entity';
+import { EMAIL_QUEUE, EmailJobData } from '../email/email.processor';
 
-@Processor('complaint-routing')
+export const COMPLAINT_ROUTING_QUEUE = 'complaint-routing';
+
+export interface ComplaintRoutingJobData {
+  complaintId: string;
+}
+
+@Processor(COMPLAINT_ROUTING_QUEUE)
 export class ComplaintRoutingProcessor {
   private readonly logger = new Logger(ComplaintRoutingProcessor.name);
 
   constructor(
-    private readonly aiService: AiService,
-    private readonly committeesService: CommitteesService,
-    private readonly rulesService: NotificationRulesService,
-    private readonly notifier: ComplaintNotifierService,
-    @InjectRepository(Complaint)
-    private readonly complaintRepo: Repository<Complaint>,
-    private readonly configService: ConfigService,
+    @InjectRepository(Complaint) private complaintRepo: Repository<Complaint>,
+    @InjectQueue(EMAIL_QUEUE) private emailQueue: Queue,
+    private notificationsService: NotificationsService,
+    private usersService: UsersService,
+    private committeesService: CommitteesService,
+    private aiService: AiService,
+    private emailService: EmailService,
+    private eventsGateway: EventsGateway,
   ) {}
 
-  @Process()
-  async handleRouting(job: Job<{ complaintId: string }>) {
+  @Process('route-complaint')
+  async handleComplaintRouting(job: Job<ComplaintRoutingJobData>) {
     const { complaintId } = job.data;
     const complaint = await this.complaintRepo.findOne({
       where: { id: complaintId },
       relations: ['raisedBy'],
     });
-    if (!complaint) return;
-
-    const threshold = parseFloat(
-      this.configService.get('ROUTING_CONFIDENCE_THRESHOLD', '0.7'),
-    );
-
-    // Step 1: AI routing
-    let committeeId: string | undefined;
-    let routingMethod = RoutingMethod.AI;
-    let routingConfidence: number | undefined;
-    let routingReason: string | undefined;
-    let rawResponse: Record<string, unknown> | undefined;
-
-    try {
-      const result = await this.aiService.routeComplaintWithConfidence({
-        title: complaint.title,
-        description: complaint.description,
-        aiSummary: complaint.aiSummary ?? undefined,
-      });
-
-      routingConfidence = result.confidence;
-      routingReason = result.reason;
-      rawResponse = result as unknown as Record<string, unknown>;
-
-      if (result.confidence >= threshold) {
-        const committee = await this.committeesService.findAll()
-          .then((cs) => cs.find((c) => c.name === result.committee));
-        committeeId = committee?.id;
-      }
-    } catch (error) {
-      this.logger.error(`AI routing failed for ${complaintId}: ${error}`);
+    if (!complaint) {
+      this.logger.warn(`Complaint ${complaintId} not found, skipping`);
+      return;
     }
 
-    // Step 2: Fallback chain
-    if (!committeeId) {
-      routingMethod = RoutingMethod.CATEGORY;
-      const byCat = await this.committeesService.findByCategory(complaint.category);
-      if (byCat) {
-        committeeId = byCat.id;
-        routingReason = `Category mapping: ${complaint.category} → ${byCat.name}`;
-      } else {
-        const fallback = await this.committeesService.findByCategory('other' as any);
-        if (fallback) {
-          committeeId = fallback.id;
-          routingReason = `Fallback: other → ${fallback.name}`;
-        } else {
-          this.logger.warn(`No committee found for complaint ${complaintId}`);
-          routingReason = 'No matching committee found';
-        }
-      }
+    // Route to committee — DB mapping first, Groq AI fallback
+    let targetCommitteeName: string | null = null;
+    let routingReason = '';
+    const mappedCommittee = await this.committeesService.findByCategory(complaint.category);
+
+    if (mappedCommittee) {
+      targetCommitteeName = mappedCommittee.name;
+      routingReason = `Category "${complaint.category}" is mapped to ${mappedCommittee.name}`;
+      this.logger.log(`DB mapping: "${complaint.category}" → "${targetCommitteeName}"`);
+    } else {
+      const routing = await this.aiService.routeComplaintWithConfidence({ title: complaint.title, description: complaint.description });
+      targetCommitteeName = routing.committee;
+      routingReason = routing.reason;
+      this.logger.log(`AI routed "${complaint.title}" → "${targetCommitteeName}" (${routing.confidence})`);
     }
 
-    // Step 3: Save routing result
-    await this.complaintRepo.update(complaintId, {
-      committeeId,
-      routingMethod,
-      routingConfidence,
-      routingReason,
-      routingRawAiResponse: rawResponse as any,
+    // Find committee members via committeeId FK
+    const targetCommittee = mappedCommittee ?? await this.committeesService.findByName(targetCommitteeName!);
+    let recipients = targetCommittee
+      ? await this.usersService.getMembersByCommitteeId(targetCommittee.id)
+      : [];
+
+    if (recipients.length === 0) {
+      this.logger.warn(`No members for "${targetCommitteeName}", falling back to all committee members`);
+      recipients = await this.usersService.getCommitteeMembers();
+    }
+
+    recipients = recipients.filter((u) => u.id !== complaint.raisedById);
+
+    if (recipients.length === 0) {
+      this.logger.warn(`No recipients after exclusions for complaint ${complaintId}, skipping`);
+      return;
+    }
+
+    // Create notification record
+    const subject = `[${complaint.priority.toUpperCase()}] Complaint: ${complaint.title}`;
+    const messageBody = `A new complaint has been submitted and assigned to ${targetCommitteeName}.\n\nReason: ${routingReason}`;
+
+    const notification = await this.notificationsService.createNotification({
+      complaintId: complaint.id,
+      type: NotificationType.INITIAL,
+      channel: NotificationChannel.EMAIL,
+      subject,
+      body: messageBody,
+      recipientIds: recipients.map((r) => r.id),
     });
-    complaint.committeeId = committeeId; // update in memory for fast passing
 
-    // Step 4: Resolve notification recipients and send
-    if (!complaint.notificationSentAt) {
-      let notified = false;
+    // Queue one email job per recipient — each gets independent retry logic
+    const trackingMap = new Map(notification.recipients.map((nr) => [nr.recipientId, nr.trackingId]));
+    await Promise.all(
+      recipients.map(async (member) => {
+        const trackingId = trackingMap.get(member.id);
+        if (!trackingId) return;
 
-      if (committeeId) {
-        const recipientIds = await this.rulesService.resolveRecipients(committeeId, {
+        const html = this.emailService.buildNotificationHtml({
+          recipientName: member.fullName,
+          complaintTitle: complaint.title,
+          complaintId: complaint.id,
+          trackingId,
+          message: messageBody,
           priority: complaint.priority,
-          category: complaint.category,
         });
 
-        if (recipientIds.length > 0) {
-          await this.notifier.sendToRecipientIds({
-            complaint,
-            recipientUserIds: recipientIds,
-            includeAiSummary: complaint.aiSummaryStatus === 'completed',
-          });
-          notified = true;
-        }
-      }
-
-      if (!notified) {
-        // Fallback: no notification rules configured for this committee.
-        // Notify the committee manager (or all managers if no committee manager assigned).
-        this.logger.warn(
-          `No notification rules for committee ${committeeId ?? 'NONE'} — falling back to manager notification`,
+        await this.emailQueue.add(
+          'send-email',
+          { to: member.email, subject, html, trackingId } as EmailJobData,
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
         );
-        await this.notifier.notifyManagers(complaint);
-      }
+      }),
+    );
 
-      await this.complaintRepo.update(complaintId, { notificationSentAt: new Date() });
-    }
+    await this.complaintRepo.update(complaint.id, { status: ComplaintStatus.ASSIGNED });
+    this.eventsGateway.emitComplaintUpdated({ complaintId: complaint.id, status: ComplaintStatus.ASSIGNED });
 
-    this.logger.log(`Routed complaint ${complaintId} to committee ${committeeId ?? 'NONE'} via ${routingMethod}`);
+    this.logger.log(
+      `Complaint ${complaintId} routed to "${targetCommitteeName}", ${recipients.length} email job(s) queued`,
+    );
   }
 }

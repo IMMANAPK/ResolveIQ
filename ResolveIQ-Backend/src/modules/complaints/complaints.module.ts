@@ -3,8 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintsController } from './complaints.controller';
-import { ComplaintNotifierService } from './complaint-notifier.service';
-import { ComplaintRoutingProcessor } from './complaint-routing.processor';
+import { ComplaintRoutingProcessor, COMPLAINT_ROUTING_QUEUE } from './complaint-routing.processor';
 import { Complaint } from './entities/complaint.entity';
 import { SlaService } from './sla.service';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -14,12 +13,14 @@ import { AiModule } from '../ai/ai.module';
 import { CommitteesModule } from '../committees/committees.module';
 import { WorkflowsModule } from '../workflows/workflows.module';
 import { AttachmentsModule } from '../attachments/attachments.module';
+import { GatewayModule } from '../gateway/gateway.module';
+import { EMAIL_QUEUE } from '../email/email.processor';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Complaint]),
-    // Register complaint-routing queue here so ComplaintRoutingProcessor can consume it
-    BullModule.registerQueue({ name: 'complaint-routing' }),
+    BullModule.registerQueue({ name: COMPLAINT_ROUTING_QUEUE }),
+    BullModule.registerQueue({ name: EMAIL_QUEUE }),
     NotificationsModule,
     EmailModule,
     UsersModule,
@@ -27,8 +28,9 @@ import { AttachmentsModule } from '../attachments/attachments.module';
     CommitteesModule,
     forwardRef(() => WorkflowsModule),
     AttachmentsModule,
+    GatewayModule,
   ],
-  providers: [ComplaintsService, ComplaintNotifierService, ComplaintRoutingProcessor, SlaService],
+  providers: [ComplaintsService, ComplaintRoutingProcessor, SlaService],
   controllers: [ComplaintsController],
   exports: [ComplaintsService],
 })

@@ -11,8 +11,7 @@ export class Committee extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description?: string;
 
-  /** Complaint categories this committee handles (stored as comma-separated string) */
-  @Column({ type: 'simple-array', default: '' })
+  @Column({ type: 'jsonb', default: () => "'[]'" })
   categories: ComplaintCategory[];
 
   /** Manager who oversees this committee (nullable — can be unassigned) */

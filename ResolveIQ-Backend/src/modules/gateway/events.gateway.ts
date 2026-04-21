@@ -24,6 +24,10 @@ export class EventsGateway {
     client.join(`complaint:${complaintId}`);
   }
 
+  emitComplaintUpdated(data: { complaintId: string; status: string }) {
+    this.server.to(`complaint:${data.complaintId}`).emit('complaint:updated', data);
+  }
+
   emitNotificationRead(data: { notificationId: string; recipientId: string; readAt: Date }) {
     this.server.emit('notification:read', data);
   }

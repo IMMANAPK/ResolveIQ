@@ -15,6 +15,7 @@ export interface SendEmailOptions {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly appBaseUrl: string;
+  private readonly smtpTransporter?: nodemailer.Transporter;
 
   // @Optional() prevents a hard DI error during early bootstrap before SettingsModule
   // has fully initialized — e.g. in EmailTrackerController which is loaded first.
@@ -22,6 +23,15 @@ export class EmailService {
     this.appBaseUrl = process.env.APP_BASE_URL ?? 'http://localhost:3000';
     if (process.env.SENDGRID_API_KEY) {
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    } else {
+      this.smtpTransporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'localhost',
+        port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+        secure: false,
+        auth: process.env.SMTP_USER
+          ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+          : undefined,
+      });
     }
   }
 

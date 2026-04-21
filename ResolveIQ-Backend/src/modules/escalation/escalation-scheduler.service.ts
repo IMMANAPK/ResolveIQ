@@ -17,8 +17,10 @@ const AI_DECISION_STEP_MAP: Record<string, EscalationStep> = {
 export class EscalationSchedulerService {
   private readonly logger = new Logger(EscalationSchedulerService.name);
 
-  /** Minimum age (minutes) before AI is even consulted — avoids spamming brand-new notifications */
-  private readonly minimumAgeMinutes = parseInt(process.env.ESCALATION_MIN_AGE_MINUTES ?? '30', 10);
+  private readonly reminderMinutes = parseInt(process.env.ESCALATION_REMINDER_MINUTES ?? '60', 10);
+  private readonly rerouteMinutes = parseInt(process.env.ESCALATION_REROUTE_MINUTES ?? '180', 10);
+  private readonly criticalMinutes = parseInt(process.env.ESCALATION_CRITICAL_MINUTES ?? '360', 10);
+  private readonly batchSize = parseInt(process.env.ESCALATION_BATCH_SIZE ?? '50', 10);
 
   constructor(
     @InjectQueue(ESCALATION_QUEUE) private escalationQueue: Queue,
@@ -30,7 +32,8 @@ export class EscalationSchedulerService {
   async runEscalationCheck() {
     this.logger.log('Running AI-driven escalation check...');
     const notifications = await this.notificationsService.getUnacknowledgedNotifications(
-      this.minimumAgeMinutes,
+      this.reminderMinutes,
+      this.batchSize,
     );
 
     for (const notification of notifications) {
