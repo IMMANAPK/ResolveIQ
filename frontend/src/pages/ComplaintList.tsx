@@ -2,6 +2,8 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Eye, Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/cms/StatusBadge";
+import { SentimentBadge } from "@/components/cms/SentimentBadge";
+import { SlaBadge } from "@/components/cms/SlaBadge";
 import { Button } from "@/components/ui/button";
 import { useComplaints } from "@/hooks/useComplaints";
 import { PRIORITY_LABELS, STATUS_LABELS } from "@/types/api";
@@ -45,10 +47,12 @@ export default function ComplaintList() {
         {/* Table header */}
         <div className="hidden border-b border-border bg-muted/30 px-5 py-3 sm:grid sm:grid-cols-12 sm:gap-4">
           <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">ID</div>
-          <div className="col-span-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">Title</div>
-          <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Priority</div>
+          <div className="col-span-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Title</div>
+          <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Priority</div>
           <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</div>
-          <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Category</div>
+          <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Category</div>
+          <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Sentiment</div>
+          <div className="col-span-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">SLA</div>
           <div className="col-span-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">Action</div>
         </div>
 
@@ -69,21 +73,32 @@ export default function ComplaintList() {
                 className="grid grid-cols-1 gap-2 px-5 py-4 transition-colors duration-150 hover:bg-muted/30 sm:grid-cols-12 sm:items-center sm:gap-4"
               >
                 <div className="col-span-1 text-xs font-medium text-muted-foreground tabular-nums truncate">{c.id.slice(0, 8)}</div>
-                <div className="col-span-4">
+                <div className="col-span-3">
                   <p className="text-sm font-medium text-foreground">{c.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
                     {priorityLabel} · {statusLabel}
                   </p>
                 </div>
-                <div className="col-span-2 hidden sm:block">
+                <div className="col-span-1 hidden sm:block">
                   <StatusBadge priority={priorityLabel as never}>{priorityLabel}</StatusBadge>
                 </div>
                 <div className="col-span-2 hidden sm:block">
                   <StatusBadge status={statusLabel as never}>{statusLabel}</StatusBadge>
                 </div>
-                <div className="col-span-2 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
+                <div className="col-span-1 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
                   <Eye className="h-3.5 w-3.5" />
                   <span className="capitalize">{c.category}</span>
+                </div>
+                <div className="col-span-1 hidden sm:block">
+                  <SentimentBadge label={c.sentimentLabel} />
+                </div>
+                <div className="col-span-2 hidden sm:block">
+                  <SlaBadge
+                    slaDeadline={c.slaDeadline}
+                    slaBreached={c.slaBreached}
+                    createdAt={c.createdAt}
+                    status={c.status}
+                  />
                 </div>
                 <div className="col-span-1">
                   <Button variant="ghost" size="sm" asChild className="text-xs text-primary">

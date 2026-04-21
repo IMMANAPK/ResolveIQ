@@ -21,7 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCreateComplaint } from "@/hooks/useComplaints";
+import { FileDropzone } from "@/components/cms/FileDropzone";
+import api from "@/lib/api";
 import type { ApiComplaintCategory, ApiComplaintPriority } from "@/types/api";
 
 const schema = z.object({
@@ -40,6 +43,8 @@ interface Props {
 
 export function FileComplaintDialog({ open, onOpenChange }: Props) {
   const createComplaint = useCreateComplaint();
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -54,7 +59,18 @@ export function FileComplaintDialog({ open, onOpenChange }: Props) {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await createComplaint.mutateAsync(data);
+      const complaint = await createComplaint.mutateAsync(data);
+      for (const file of attachmentFiles) {
+        const form = new FormData();
+        form.append('file', file);
+        await api.post(`/complaints/${complaint.id}/attachments`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }).catch((e) => console.error(`Failed to upload ${file.name}`, e));
+      }
+      if (attachmentFiles.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['attachments', complaint.id] });
+      }
+      setAttachmentFiles([]);
       toast.success("Complaint filed successfully");
       reset();
       onOpenChange(false);
@@ -140,6 +156,11 @@ export function FileComplaintDialog({ open, onOpenChange }: Props) {
                 <p className="text-xs text-destructive">{errors.priority.message}</p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Attachments (optional, max 3)</label>
+            <FileDropzone files={attachmentFiles} onChange={setAttachmentFiles} />
           </div>
 
           <DialogFooter className="pt-2">

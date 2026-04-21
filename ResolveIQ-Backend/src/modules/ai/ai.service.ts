@@ -1,8 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { CommitteesService } from '../committees/committees.service';
+import { SettingsService } from '../settings/settings.service';
+import { SentimentLabel } from '../complaints/entities/complaint.entity';
 
 export type ReminderTone = 'polite' | 'urgent' | 'critical';
+export type EscalationDecisionStep = 'reminder' | 'reroute' | 'multi_channel' | 'skip';
+
+export interface EscalationDecision {
+  shouldEscalate: boolean;
+  step: EscalationDecisionStep;
+  reason: string;
+}
 
 export interface ReminderPromptContext {
   recipientName: string;
@@ -20,12 +29,6 @@ export interface GeneratedReminder {
   tone: ReminderTone;
 }
 
-export interface ComplaintRouting {
-  committee: string;
-  reason: string;
-  confidence: 'high' | 'medium' | 'low';
-}
-
 // Fallback hardcoded list used only when DB has no committees yet
 const FALLBACK_COMMITTEES = [
   "Women's Safety Committee",
@@ -37,10 +40,19 @@ const FALLBACK_COMMITTEES = [
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private client: Groq;
 
-  constructor(private readonly committeesService: CommitteesService) {
-    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  constructor(
+    private readonly committeesService: CommitteesService,
+    private readonly settingsService: SettingsService,
+  ) {}
+
+  private getGroqClient(): Groq {
+    const apiKey = this.settingsService.get<string>('ai.groqApiKey') || process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      this.logger.warn('Groq API Key is not configured.');
+      throw new Error('Groq API Key missing. Please configure it in System Settings.');
+    }
+    return new Groq({ apiKey });
   }
 
   determineTone(priority: string, reminderCount: number): ReminderTone {
@@ -52,68 +64,78 @@ export class AiService {
     return 'polite';
   }
 
-  /**
-   * Routes a complaint to the correct committee.
-   * 1. Loads committees + descriptions from DB
-   * 2. Sends to Groq AI for routing
-   * 3. Falls back to "General Committee" on any error
-   */
-  async routeComplaint(title: string, description: string): Promise<ComplaintRouting> {
-    // Load live committees from DB
-    let dbCommittees = await this.committeesService.getCommitteesForAi();
-    const committeeNames = dbCommittees.length > 0
-      ? dbCommittees.map((c) => c.name)
-      : FALLBACK_COMMITTEES;
+  async routeComplaintWithConfidence(complaint: {
+    title: string;
+    description: string;
+    aiSummary?: string;
+  }): Promise<{ committee: string; confidence: number; reason: string }> {
+    const committees = await this.committeesService.getCommitteesForAi();
+    if (committees.length === 0) {
+      return { committee: 'General Committee', confidence: 0, reason: 'No committees configured' };
+    }
 
-    const fallback = committeeNames.find((n) => n.toLowerCase().includes('general')) ?? committeeNames[0] ?? 'General Committee';
+    const committeeList = committees
+      .map((c) => `- ${c.name}: ${c.description || 'No description'} (categories: ${c.categories.join(', ') || 'none'})`)
+      .join('\n');
 
-    const committeeList = dbCommittees.length > 0
-      ? dbCommittees.map((c, i) => {
-          const cats = c.categories.length > 0 ? ` (handles: ${c.categories.join(', ')})` : '';
-          const desc = c.description ? ` — ${c.description}` : '';
-          return `${i + 1}. ${c.name}${cats}${desc}`;
-        }).join('\n')
-      : FALLBACK_COMMITTEES.map((c, i) => `${i + 1}. ${c}`).join('\n');
+    const summaryContext = complaint.aiSummary ? `\nAI Summary: ${complaint.aiSummary}` : '';
 
-    const prompt = `You are a complaint routing assistant for a corporate complaint management system called ResolveIQ.
+    const prompt = `You are a complaint routing assistant. Route this complaint to the most appropriate committee.
 
-Available committees:
+Available Committees:
 ${committeeList}
 
-Complaint to route:
-Title: ${title}
-Description: ${description}
+Complaint Title: ${complaint.title}
+Complaint Description: ${complaint.description}${summaryContext}
 
-Respond ONLY with this exact JSON (no markdown fences, no extra text):
-{"committee":"<exact committee name from list>","reason":"<one sentence why>","confidence":"high|medium|low"}`;
+Respond in JSON format ONLY:
+{"committee": "Committee Name", "confidence": 0.0-1.0, "reason": "one sentence explanation"}`;
 
+    const response = await this.getGroqClient().chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 150,
+      temperature: 0.1,
+    });
+
+    const text = response.choices[0]?.message?.content?.trim() ?? '';
     try {
-      const completion = await this.client.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 150,
-        temperature: 0.1,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const raw = completion.choices[0]?.message?.content?.trim() ?? '';
-      this.logger.log(`Groq routing response: ${raw}`);
-
-      const cleaned = raw.replace(/```json?|```/g, '').trim();
-      const parsed = JSON.parse(cleaned) as ComplaintRouting;
-
-      const matched = committeeNames.find(
-        (c) => c.toLowerCase() === parsed.committee?.toLowerCase(),
-      );
-      if (!matched) {
-        this.logger.warn(`Groq returned unknown committee "${parsed.committee}", falling back to ${fallback}`);
-        return { committee: fallback, reason: 'Defaulted: unrecognised committee from AI', confidence: 'low' };
-      }
-
-      return { ...parsed, committee: matched };
-    } catch (err) {
-      this.logger.error('Groq routing call failed, falling back to ' + fallback, err);
-      return { committee: fallback, reason: 'AI routing unavailable', confidence: 'low' };
+      const parsed = JSON.parse(text);
+      return {
+        committee: parsed.committee ?? 'General Committee',
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+        reason: parsed.reason ?? 'AI routing',
+      };
+    } catch {
+      return { committee: 'General Committee', confidence: 0, reason: 'Failed to parse AI response' };
     }
+  }
+
+  async generateSummary(complaint: {
+    title: string;
+    description: string;
+    category: string;
+    priority: string;
+  }): Promise<string> {
+    const prompt = `You are a complaint summarizer. Generate a concise 2-3 sentence summary of this complaint for internal review.
+
+Title: ${complaint.title}
+Category: ${complaint.category}
+Priority: ${complaint.priority}
+Description: ${complaint.description}
+
+Respond with ONLY the summary text, no labels or formatting.`;
+
+    const response = await this.getGroqClient().chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 200,
+      temperature: 0.3,
+    });
+
+    const summary = response.choices[0]?.message?.content?.trim();
+    if (!summary) throw new Error('AI returned empty summary');
+    return summary;
   }
 
   buildReminderPrompt(ctx: ReminderPromptContext): string {
@@ -147,7 +169,7 @@ Subject: <subject line>
 
   async generateReminderEmail(ctx: ReminderPromptContext): Promise<GeneratedReminder> {
     try {
-      const completion = await this.client.chat.completions.create({
+      const completion = await this.getGroqClient().chat.completions.create({
         model: 'llama-3.3-70b-versatile',
         max_tokens: 512,
         messages: [{ role: 'user', content: this.buildReminderPrompt(ctx) }],
@@ -165,6 +187,169 @@ Subject: <subject line>
       this.logger.error('Groq reminder generation failed, using fallback', err);
       return this.fallbackReminder(ctx);
     }
+  }
+
+  async decideEscalationAction(context: {
+    complaintTitle: string;
+    complaintDescription: string;
+    priority: string;
+    ageMinutes: number;
+    reminderCount: number;
+  }): Promise<EscalationDecision> {
+    const { complaintTitle, complaintDescription, priority, ageMinutes, reminderCount } = context;
+    const hoursElapsed = (ageMinutes / 60).toFixed(1);
+
+    const prompt = `You are an AI escalation advisor for a complaint management system called ResolveIQ.
+
+A complaint has not been acknowledged by the assigned committee members. Decide what escalation action to take RIGHT NOW.
+
+Complaint Details:
+- Title: ${complaintTitle}
+- Description: ${complaintDescription}
+- Priority: ${priority.toUpperCase()}
+- Time since notification was sent: ${hoursElapsed} hours (${ageMinutes} minutes)
+- Number of reminders already sent: ${reminderCount}
+
+Escalation steps available:
+- "reminder": Send another email reminder to the original recipients (appropriate for early-stage, low reminder counts)
+- "reroute": Re-route the complaint to other available committee members (appropriate when original recipients are clearly unresponsive)
+- "multi_channel": Trigger critical push notifications and in-app alerts (appropriate for critical/high priority complaints with long delays)
+- "skip": Do nothing yet, it is too early or not urgent enough to escalate
+
+Decision rules to consider:
+- Critical priority complaints should escalate faster
+- If reminderCount >= 3, prefer reroute or multi_channel over another reminder
+- If ageMinutes < 30 and priority is low/medium, prefer skip
+- Use multi_channel only when the situation is truly urgent (high priority + long delay, or critical priority)
+
+Respond in JSON format ONLY (no explanation outside JSON):
+{"shouldEscalate": true/false, "step": "reminder|reroute|multi_channel|skip", "reason": "one sentence explanation"}`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 150,
+        temperature: 0.1,
+      });
+
+      const text = response.choices[0]?.message?.content?.trim() ?? '';
+      // Strip markdown code fences if present
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      const step: EscalationDecisionStep = ['reminder', 'reroute', 'multi_channel', 'skip'].includes(parsed.step)
+        ? parsed.step
+        : 'reminder';
+      return {
+        shouldEscalate: parsed.shouldEscalate !== false && step !== 'skip',
+        step,
+        reason: parsed.reason ?? 'AI escalation decision',
+      };
+    } catch (err) {
+      this.logger.error('AI escalation decision failed, using fallback logic', err);
+      return this.fallbackEscalationDecision(priority, ageMinutes, reminderCount);
+    }
+  }
+
+  async analyzeSentiment(complaint: { title: string; description: string }): Promise<{
+    label: SentimentLabel;
+    score: number;
+    confidence: number;
+  }> {
+    const prompt = `You are a sentiment analysis assistant for a complaint management system.
+
+Analyze the emotional tone of this complaint and classify it.
+
+Complaint Title: ${complaint.title}
+Complaint Description: ${complaint.description}
+
+Classify into exactly ONE of these labels:
+- "frustrated": The person is annoyed or exasperated
+- "angry": The person is upset or hostile
+- "neutral": The person is stating facts without strong emotion
+- "concerned": The person is worried but reasonable
+- "satisfied": The person is generally positive (rare in complaints)
+
+Also provide:
+- "score": A number from 0.0 (very negative) to 1.0 (very positive)
+- "confidence": A number from 0.0 to 1.0 indicating how confident you are
+
+Respond in JSON format ONLY:
+{"label": "one_of_the_labels", "score": 0.0-1.0, "confidence": 0.0-1.0}`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.1,
+      });
+
+      const text = response.choices[0]?.message?.content?.trim() ?? '';
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+
+      const validLabels: SentimentLabel[] = ['frustrated', 'angry', 'neutral', 'concerned', 'satisfied'];
+      const label: SentimentLabel = validLabels.includes(parsed.label) ? parsed.label : 'neutral';
+      const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(1, parsed.score)) : 0.5;
+      const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5;
+
+      return { label, score, confidence };
+    } catch (err) {
+      this.logger.error('AI sentiment analysis failed, using fallback', err);
+      return { label: 'neutral', score: 0.5, confidence: 0 };
+    }
+  }
+
+  async summarizeFeedback(context: {
+    complaintTitle: string;
+    rating: number;
+    comment: string;
+  }): Promise<string> {
+    const prompt = `You are a feedback summarizer for a complaint management system.
+
+A complainant has provided feedback on the resolution of their complaint.
+
+Complaint Title: ${context.complaintTitle}
+Rating: ${context.rating}/5 stars
+Comment: ${context.comment}
+
+Write a ONE sentence summary that captures the key sentiment and any actionable insight from this feedback. Be concise and professional.
+
+Respond with ONLY the summary sentence, no labels or formatting.`;
+
+    try {
+      const response = await this.getGroqClient().chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.3,
+      });
+
+      const summary = response.choices[0]?.message?.content?.trim();
+      if (!summary) throw new Error('Empty response');
+      return summary;
+    } catch (err) {
+      this.logger.error('AI feedback summary failed', err);
+      throw err; // caller handles fallback (leaves aiSummary null)
+    }
+  }
+
+  private fallbackEscalationDecision(
+    priority: string,
+    ageMinutes: number,
+    reminderCount: number,
+  ): EscalationDecision {
+    if (ageMinutes >= 360 || (priority === 'critical' && ageMinutes >= 120)) {
+      return { shouldEscalate: true, step: 'multi_channel', reason: 'Fallback: critical threshold reached' };
+    }
+    if (ageMinutes >= 180 || (priority === 'high' && ageMinutes >= 90 && reminderCount >= 1)) {
+      return { shouldEscalate: true, step: 'reroute', reason: 'Fallback: reroute threshold reached' };
+    }
+    if (ageMinutes >= 60) {
+      return { shouldEscalate: true, step: 'reminder', reason: 'Fallback: reminder threshold reached' };
+    }
+    return { shouldEscalate: false, step: 'skip', reason: 'Fallback: too early to escalate' };
   }
 
   private fallbackReminder(ctx: ReminderPromptContext): GeneratedReminder {

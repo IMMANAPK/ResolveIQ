@@ -38,7 +38,6 @@ export class ComplaintRoutingProcessor {
   @Process('route-complaint')
   async handleComplaintRouting(job: Job<ComplaintRoutingJobData>) {
     const { complaintId } = job.data;
-
     const complaint = await this.complaintRepo.findOne({
       where: { id: complaintId },
       relations: ['raisedBy'],
@@ -58,7 +57,7 @@ export class ComplaintRoutingProcessor {
       routingReason = `Category "${complaint.category}" is mapped to ${mappedCommittee.name}`;
       this.logger.log(`DB mapping: "${complaint.category}" → "${targetCommitteeName}"`);
     } else {
-      const routing = await this.aiService.routeComplaint(complaint.title, complaint.description);
+      const routing = await this.aiService.routeComplaintWithConfidence({ title: complaint.title, description: complaint.description });
       targetCommitteeName = routing.committee;
       routingReason = routing.reason;
       this.logger.log(`AI routed "${complaint.title}" → "${targetCommitteeName}" (${routing.confidence})`);
@@ -67,7 +66,7 @@ export class ComplaintRoutingProcessor {
     // Find committee members via committeeId FK
     const targetCommittee = mappedCommittee ?? await this.committeesService.findByName(targetCommitteeName!);
     let recipients = targetCommittee
-      ? await this.usersService.getMembersByCommittee(targetCommittee.id)
+      ? await this.usersService.getMembersByCommitteeId(targetCommittee.id)
       : [];
 
     if (recipients.length === 0) {

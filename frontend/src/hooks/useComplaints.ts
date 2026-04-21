@@ -40,6 +40,10 @@ export function useComplaint(id: string) {
       return data;
     },
     enabled: !!id,
+    // Poll every 3 s while AI summary is generating so the UI recovers
+    // even if the WebSocket event is missed (race condition or Redis down).
+    refetchInterval: (query) =>
+      query.state.data?.aiSummaryStatus === 'pending' ? 3000 : false,
   });
 }
 
@@ -61,6 +65,16 @@ export function useUpdateComplaintStatus() {
       api.patch(`/complaints/${id}/status`, { status, resolutionNotes }),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['complaints'] });
+      qc.invalidateQueries({ queryKey: ['complaints', id] });
+    },
+  });
+}
+
+export function useRegenerateSummary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/complaints/${id}/regenerate-summary`),
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ['complaints', id] });
     },
   });

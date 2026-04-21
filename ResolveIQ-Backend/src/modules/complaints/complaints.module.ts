@@ -1,15 +1,18 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { ComplaintsService } from './complaints.service';
 import { ComplaintsController } from './complaints.controller';
 import { ComplaintRoutingProcessor, COMPLAINT_ROUTING_QUEUE } from './complaint-routing.processor';
 import { Complaint } from './entities/complaint.entity';
+import { SlaService } from './sla.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { AiModule } from '../ai/ai.module';
 import { CommitteesModule } from '../committees/committees.module';
+import { WorkflowsModule } from '../workflows/workflows.module';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { EMAIL_QUEUE } from '../email/email.processor';
 
@@ -23,9 +26,11 @@ import { EMAIL_QUEUE } from '../email/email.processor';
     UsersModule,
     AiModule,
     CommitteesModule,
+    forwardRef(() => WorkflowsModule),
+    AttachmentsModule,
     GatewayModule,
   ],
-  providers: [ComplaintsService, ComplaintRoutingProcessor],
+  providers: [ComplaintsService, ComplaintRoutingProcessor, SlaService],
   controllers: [ComplaintsController],
   exports: [ComplaintsService],
 })

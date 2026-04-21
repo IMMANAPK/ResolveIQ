@@ -1,6 +1,6 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { User, UserRole } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 
@@ -14,6 +14,11 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.repo.findOne({ where: { id } });
+  }
+
+  async findByIds(ids: string[]): Promise<User[]> {
+    if (!ids || ids.length === 0) return [];
+    return this.repo.find({ where: { id: In(ids) } });
   }
 
   async getMembersByCommittee(committeeId: string): Promise<User[]> {
@@ -75,5 +80,14 @@ export class UsersService {
 
   async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
     await this.repo.update(userId, { fcmToken });
+  }
+
+  async updateCommittee(userId: string, committeeId: string | null): Promise<void> {
+    await this.repo.update(userId, { committeeId: committeeId ?? undefined });
+  }
+
+  async getMembersByCommitteeId(committeeId: string): Promise<User[]> {
+    const all = await this.repo.find({ where: { committeeId, isActive: true } });
+    return all.filter(u => u.roles.includes(UserRole.COMMITTEE_MEMBER));
   }
 }

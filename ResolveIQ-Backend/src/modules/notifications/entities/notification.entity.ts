@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, OneToMany, Index } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { Complaint } from '../../complaints/entities/complaint.entity';
 import { NotificationRecipient } from './notification-recipient.entity';
@@ -17,6 +17,9 @@ export enum NotificationChannel {
 }
 
 @Entity('notifications')
+@Index(['complaintId'])
+@Index(['type'])
+@Index(['createdAt'])
 export class Notification extends BaseEntity {
   @ManyToOne(() => Complaint)
   @JoinColumn()

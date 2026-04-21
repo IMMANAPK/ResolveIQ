@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -32,5 +32,13 @@ export class NotificationsController {
   @Get('complaint/:complaintId')
   getForComplaint(@Param('complaintId') complaintId: string) {
     return this.notificationsService.getNotificationsForComplaint(complaintId);
+  }
+
+  @Patch('complaint/:complaintId/mark-reviewed')
+  markReviewed(
+    @Param('complaintId') complaintId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.notificationsService.markReviewedByComplaintAndUser(complaintId, user.id);
   }
 }

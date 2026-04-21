@@ -34,6 +34,7 @@ import { useUsers } from "@/hooks/useUsers";
 import type { ApiCommittee, ApiComplaintCategory } from "@/types/api";
 import { CATEGORY_LABELS } from "@/types/api";
 import { toast } from "sonner";
+import { NotificationRulesSection } from "@/components/NotificationRulesSection";
 
 const ALL_CATEGORIES: ApiComplaintCategory[] = ['hr', 'it', 'facilities', 'conduct', 'safety', 'other'];
 
@@ -332,6 +333,9 @@ export default function CommitteeSettings() {
                     <span className="text-xs text-muted-foreground italic">No categories mapped</span>
                   )}
                 </div>
+
+                {/* Notification Rules */}
+                <NotificationRulesSection committeeId={c.id} />
 
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-1 border-t text-xs text-muted-foreground">
